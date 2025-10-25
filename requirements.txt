@@ -1,0 +1,21 @@
+# 🤚 ARCHAND - Advanced Hand Gesture Recognition System
+# Core computer vision and machine learning dependencies
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+numpy>=1.21.0
+
+# Automation and control dependencies
+pyautogui>=0.9.54
+autopy>=4.0.0
+
+# Speech recognition dependencies
+SpeechRecognition>=3.10.0
+PyAudio>=0.2.11
+
+# Optional: Enhanced audio processing
+# pyaudio>=0.2.11  # Uncomment if PyAudio installation fails
+
+# Development and testing (optional)
+# pytest>=7.0.0
+# black>=22.0.0
+# flake8>=4.0.0

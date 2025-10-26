@@ -50,6 +50,7 @@ class GestureType(Enum):
     SCROLL_UP = "scroll_up"
     SCROLL_DOWN = "scroll_down"
     SPEECH = "speech"
+    OPEN_YOUTUBE = "open_youtube"
     NONE = "none"
 
 
@@ -110,6 +111,11 @@ class HandGestureRecognizer:
         self.frame_count = 0
         self.fps = 0
         
+        # Speech recognition state
+        self.speech_processing = False
+        self.last_speech_time = 0
+        self.speech_cooldown = 2.0  # 2 second cooldown between speech attempts
+        
     def setup_mediapipe(self):
         """Initialize MediaPipe hand detection"""
         self.mp_hands = mp.solutions.hands
@@ -133,13 +139,13 @@ class HandGestureRecognizer:
             self.microphone = sr.Microphone()
             
             # Enhanced speech recognition settings for better clarity
-            self.speech_recognizer.energy_threshold = 200  # Lower threshold for better sensitivity
+            self.speech_recognizer.energy_threshold = 150  # Even more sensitive
             self.speech_recognizer.dynamic_energy_threshold = True
             self.speech_recognizer.dynamic_energy_adjustment_damping = 0.15
             self.speech_recognizer.dynamic_energy_ratio = 1.5
-            self.speech_recognizer.pause_threshold = 0.8  # Shorter pause detection
-            self.speech_recognizer.phrase_threshold = 0.3  # Faster phrase detection
-            self.speech_recognizer.non_speaking_duration = 0.5  # Shorter non-speaking duration
+            self.speech_recognizer.pause_threshold = 0.6  # Even faster response
+            self.speech_recognizer.phrase_threshold = 0.2  # Even faster phrase detection
+            self.speech_recognizer.non_speaking_duration = 0.3  # Even shorter silence
             
             # Calibrate microphone with longer duration for better noise reduction
             print("🎤 Calibrating microphone for optimal audio quality...")
@@ -259,7 +265,25 @@ class HandGestureRecognizer:
                 
         return fingers
         
-    def classify_gesture(self, fingers: list) -> GestureType:
+    def _is_ok_gesture(self, landmarks: list) -> bool:
+        """Check if the gesture is an OK sign (thumb and index finger forming a circle)"""
+        if len(landmarks) < 21:
+            return False
+            
+        # Get thumb tip and index tip positions
+        thumb_tip = landmarks[4]  # Thumb tip
+        index_tip = landmarks[8]  # Index tip
+        
+        # Calculate distance between thumb and index tips
+        distance = np.sqrt((thumb_tip[1] - index_tip[1])**2 + (thumb_tip[2] - index_tip[2])**2)
+        
+        # OK gesture: thumb and index are close (forming circle)
+        # Distance threshold for OK gesture (adjust as needed)
+        ok_threshold = 30  # pixels
+        
+        return distance < ok_threshold
+        
+    def classify_gesture(self, fingers: list, landmarks: list = None) -> GestureType:
         """
         Classify gesture based on finger states
         
@@ -300,6 +324,10 @@ class HandGestureRecognizer:
         # Scroll down (no fingers)
         if fingers == [0, 0, 0, 0, 0]:
             return GestureType.SCROLL_DOWN
+            
+        # Open YouTube (OK gesture - thumb + index circle, other fingers up)
+        if fingers == [1, 1, 1, 1, 1] and self._is_ok_gesture(landmarks):
+            return GestureType.OPEN_YOUTUBE
             
         return GestureType.MOVE  # Default to move
         
@@ -361,6 +389,10 @@ class HandGestureRecognizer:
             self._handle_speech_to_text()
             self._stop_drag()
             
+        elif gesture == GestureType.OPEN_YOUTUBE:
+            self._handle_open_youtube()
+            self._stop_drag()
+            
         # Update previous positions
         self.previous_x, self.previous_y = self.current_x, self.current_y
         
@@ -420,66 +452,161 @@ class HandGestureRecognizer:
         """Handle scroll down"""
         pyautogui.scroll(self.config.scroll_down_speed)
         
+    def _handle_open_youtube(self):
+        """Handle opening YouTube"""
+        webbrowser.open("https://www.youtube.com")
+        print("📺 YouTube opened via gesture")
+        
+    def _check_audio_quality(self, audio_data):
+        """Check audio quality and provide feedback"""
+        try:
+            # Convert to numpy for analysis
+            audio_np = np.frombuffer(audio_data, dtype=np.int16)
+            
+            # Check volume level (RMS)
+            rms = np.sqrt(np.mean(audio_np**2))
+            
+            # Check for clipping
+            max_amplitude = np.max(np.abs(audio_np))
+            clipping = max_amplitude > 30000  # 16-bit audio max is 32767
+            
+            # Provide feedback
+            if rms < 1000:
+                print("🔇 Audio too quiet - speak louder")
+                return False
+            elif clipping:
+                print("⚠️ Audio too loud - speak softer")
+                return False
+            elif rms > 20000:
+                print("🔊 Audio level good")
+            
+            return True
+        except Exception as e:
+            print(f"⚠️ Audio quality check failed: {e}")
+            return True  # Continue anyway
+    
+    def _recognize_with_fallbacks(self, audio):
+        """Try multiple recognition engines for better accuracy"""
+        text = None
+        engine_used = "None"
+        
+        # Primary: Google US (most accurate for general speech)
+        try:
+            text = self.speech_recognizer.recognize_google(audio, language='en-US')
+            if text and len(text.strip()) > 0:
+                engine_used = "Google US"
+                print(f"✅ Google US: {text}")
+                return text, engine_used
+        except sr.UnknownValueError:
+            print("❌ Google US couldn't understand audio")
+        except sr.RequestError as e:
+            print(f"❌ Google US error: {e}")
+        
+        # Fallback 1: Google UK (catches different accents)
+        try:
+            text = self.speech_recognizer.recognize_google(audio, language='en-GB')
+            if text and len(text.strip()) > 0:
+                engine_used = "Google UK"
+                print(f"✅ Google UK: {text}")
+                return text, engine_used
+        except sr.UnknownValueError:
+            print("❌ Google UK couldn't understand audio")
+        except sr.RequestError as e:
+            print(f"❌ Google UK error: {e}")
+        
+        # Fallback 2: Try Sphinx (offline, good for clear speech)
+        try:
+            text = self.speech_recognizer.recognize_sphinx(audio)
+            if text and len(text.strip()) > 0:
+                engine_used = "Sphinx"
+                print(f"✅ Sphinx: {text}")
+                return text, engine_used
+        except sr.UnknownValueError:
+            print("❌ Sphinx couldn't understand audio")
+        except Exception as e:
+            print(f"❌ Sphinx error: {e}")
+        
+        return None, engine_used
+
     def _handle_speech_to_text(self):
         """Handle speech to text conversion with enhanced accuracy"""
         if not self.speech_recognizer or not self.microphone:
             print("❌ Speech recognition not available")
             return
-            
+        
+        # Check if already processing speech
+        if self.speech_processing:
+            print("⏳ Speech recognition already in progress...")
+            return
+        
+        # Check cooldown period
+        current_time = cv2.getTickCount() / cv2.getTickFrequency()
+        if current_time - self.last_speech_time < self.speech_cooldown:
+            print(f"⏰ Please wait {self.speech_cooldown - (current_time - self.last_speech_time):.1f}s before speaking again")
+            return
+        
+        # Set processing flag
+        self.speech_processing = True
+        self.last_speech_time = current_time
+        
         try:
             print("🎤 Listening... Speak clearly now!")
+            
+            # Use a shorter timeout to prevent hanging
             with self.microphone as source:
-                # Recalibrate for current environment
-                self.speech_recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                # Quick recalibration
+                self.speech_recognizer.adjust_for_ambient_noise(source, duration=0.3)
                 
-                # Listen with enhanced settings
+                # Listen with shorter timeout
                 audio = self.speech_recognizer.listen(
                     source, 
-                    timeout=self.config.speech_timeout,
-                    phrase_time_limit=self.config.speech_phrase_limit
+                    timeout=3.0,  # Shorter timeout
+                    phrase_time_limit=5.0  # Shorter phrase limit
                 )
                 
                 print("🔄 Processing speech...")
                 
+                # Check audio quality first and store level for visual feedback
+                audio_data = audio.get_raw_data()
+                if not self._check_audio_quality(audio_data):
+                    print("❌ Audio quality too poor, please try again")
+                    return
+                
+                # Store audio level for visual feedback
+                audio_np = np.frombuffer(audio_data, dtype=np.int16)
+                rms = np.sqrt(np.mean(audio_np**2))
+                self.last_audio_level = min(rms / 20000, 1.0)  # Normalize to 0-1
+                
                 # Try multiple recognition methods for better accuracy
-                text = None
+                text, engine_used = self._recognize_with_fallbacks(audio)
                 
-                # Primary: Google Speech Recognition
-                try:
-                    text = self.speech_recognizer.recognize_google(audio, language='en-US')
-                    print(f"✅ Google: {text}")
-                except sr.UnknownValueError:
-                    print("❌ Google couldn't understand audio")
-                except sr.RequestError as e:
-                    print(f"❌ Google error: {e}")
-                
-                # Fallback: Try with different language models
-                if not text:
-                    try:
-                        text = self.speech_recognizer.recognize_google(audio, language='en-GB')
-                        print(f"✅ Google UK: {text}")
-                    except:
-                        pass
+                # Store recognition engine for visual feedback
+                self.last_recognition_engine = engine_used
                 
                 # If we got text, process it
                 if text:
                     text = text.strip().lower()
-                    print(f"🎤 Speech recognized: '{text}'")
+                    print(f"🎤 Speech recognized ({engine_used}): '{text}'")
                     
                     # Process voice commands first
                     if self._process_voice_command(text):
+                        print("✅ Command executed successfully")
                         return
                     
                     # If not a command, type the text
                     pyautogui.write(text, interval=self.config.typing_interval)
                     print(f"📝 Typed: {text}")
                 else:
-                    print("❌ Could not understand speech. Please try again.")
+                    print("❌ Could not understand speech with any engine. Please try again.")
                     
         except sr.WaitTimeoutError:
             print("⏰ Speech timeout - no audio detected")
         except Exception as e:
             print(f"❌ Speech error: {e}")
+        finally:
+            # Always reset processing flag
+            self.speech_processing = False
+            print("✅ Speech recognition ready for next command")
     
     def _process_voice_command(self, text: str) -> bool:
         """Process voice commands and return True if command was processed"""
@@ -502,6 +629,10 @@ class HandGestureRecognizer:
             elif "google" in text:
                 webbrowser.open("https://www.google.com")
                 print("🌐 Google opened")
+                return True
+            elif "youtube" in text or "youtube.com" in text:
+                webbrowser.open("https://www.youtube.com")
+                print("📺 YouTube opened")
                 return True
         
         elif "volume" in text:
@@ -586,12 +717,39 @@ class HandGestureRecognizer:
             "jarvAIs - Hand Gesture & Voice Control",
             "Index: Move | Index+Middle: Click | Drag",
             "Thumb: Right Click | Fist: Scroll Up | Open: Scroll Down",
-            "Middle: Speech | Voice: 'JARVIS' + command | Press 'q' to quit"
+            "Middle: Speech | OK Gesture: YouTube",
+            "Press 'q' to quit"
         ]
         
         for i, instruction in enumerate(instructions):
             cv2.putText(frame, instruction, (10, 30 + i * 25), 
                        cv2.FONT_HERSHEY_PLAIN, 0.7, (255, 255, 255), 1)
+        
+        # Draw audio quality indicator (if available)
+        if hasattr(self, 'last_audio_level'):
+            # Audio level bar
+            bar_width = int(self.last_audio_level * 200)
+            cv2.rectangle(frame, (width - 250, height - 100), (width - 250 + bar_width, height - 80), 
+                          (0, 255, 0) if self.last_audio_level > 0.1 else (0, 0, 255), -1)
+            cv2.putText(frame, "Audio Level", (width - 250, height - 110), 
+                       cv2.FONT_HERSHEY_PLAIN, 0.6, (255, 255, 255), 1)
+        
+        # Draw recognition status
+        if hasattr(self, 'last_recognition_engine'):
+            cv2.putText(frame, f"Engine: {self.last_recognition_engine}", (width - 250, height - 50), 
+                       cv2.FONT_HERSHEY_PLAIN, 0.6, (0, 255, 255), 1)
+        
+        # Draw speech processing status
+        if hasattr(self, 'speech_processing') and self.speech_processing:
+            cv2.putText(frame, "🎤 PROCESSING...", (width - 250, height - 20), 
+                       cv2.FONT_HERSHEY_PLAIN, 0.8, (0, 255, 0), 2)
+        elif hasattr(self, 'last_speech_time'):
+            current_time = cv2.getTickCount() / cv2.getTickFrequency()
+            time_since_speech = current_time - self.last_speech_time
+            if time_since_speech < self.speech_cooldown:
+                remaining = self.speech_cooldown - time_since_speech
+                cv2.putText(frame, f"⏰ Wait {remaining:.1f}s", (width - 250, height - 20), 
+                           cv2.FONT_HERSHEY_PLAIN, 0.6, (0, 255, 255), 1)
         
     
 
@@ -1017,7 +1175,7 @@ def main():
             # Detect and execute gestures
             if len(landmarks) >= 21:  # Full hand detected
                 fingers = recognizer.detect_finger_states(landmarks)
-                gesture = recognizer.classify_gesture(fingers)
+                gesture = recognizer.classify_gesture(fingers, landmarks)
                 recognizer.execute_gesture(gesture, landmarks, frame)
             else:
                 gesture = GestureType.NONE

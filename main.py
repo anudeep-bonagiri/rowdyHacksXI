@@ -71,9 +71,9 @@ class Config:
     scroll_up_speed: int = 60
     scroll_down_speed: int = -60
     
-    # Speech settings
-    speech_timeout: int = 10  # Increased from 5 to 10 seconds
-    speech_phrase_limit: int = 15  # Increased from 10 to 15 seconds
+    # Speech settings - Enhanced for better clarity
+    speech_timeout: int = 5  # Shorter timeout for faster response
+    speech_phrase_limit: int = 10  # Shorter phrase limit for better accuracy
     typing_interval: float = 0.01
     auto_start: bool = True
     live_transcribe: bool = True  # Enable live transcription
@@ -127,11 +127,25 @@ class HandGestureRecognizer:
         self.finger_tips = [4, 8, 12, 16, 20]  # Thumb, Index, Middle, Ring, Pinky
         
     def setup_speech_recognition(self):
-        """Initialize speech recognition system"""
+        """Initialize speech recognition system with enhanced settings"""
         try:
             self.speech_recognizer = sr.Recognizer()
             self.microphone = sr.Microphone()
-            print("🎤 Speech recognition initialized successfully")
+            
+            # Enhanced speech recognition settings for better clarity
+            self.speech_recognizer.energy_threshold = 200  # Lower threshold for better sensitivity
+            self.speech_recognizer.dynamic_energy_threshold = True
+            self.speech_recognizer.dynamic_energy_adjustment_damping = 0.15
+            self.speech_recognizer.dynamic_energy_ratio = 1.5
+            self.speech_recognizer.pause_threshold = 0.8  # Shorter pause detection
+            self.speech_recognizer.phrase_threshold = 0.3  # Faster phrase detection
+            self.speech_recognizer.non_speaking_duration = 0.5  # Shorter non-speaking duration
+            
+            # Calibrate microphone with longer duration for better noise reduction
+            print("🎤 Calibrating microphone for optimal audio quality...")
+            with self.microphone as source:
+                self.speech_recognizer.adjust_for_ambient_noise(source, duration=2.0)
+            print("✅ Speech recognition initialized successfully")
         except Exception as e:
             print(f"❌ Speech recognition unavailable: {e}")
             self.speech_recognizer = None
@@ -407,24 +421,137 @@ class HandGestureRecognizer:
         pyautogui.scroll(self.config.scroll_down_speed)
         
     def _handle_speech_to_text(self):
-        """Handle speech to text conversion"""
+        """Handle speech to text conversion with enhanced accuracy"""
         if not self.speech_recognizer or not self.microphone:
+            print("❌ Speech recognition not available")
             return
             
         try:
+            print("🎤 Listening... Speak clearly now!")
             with self.microphone as source:
-                self.speech_recognizer.adjust_for_ambient_noise(source)
+                # Recalibrate for current environment
+                self.speech_recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                
+                # Listen with enhanced settings
                 audio = self.speech_recognizer.listen(
                     source, 
                     timeout=self.config.speech_timeout,
                     phrase_time_limit=self.config.speech_phrase_limit
                 )
-                text = self.speech_recognizer.recognize_google(audio)
+                
+                print("🔄 Processing speech...")
+                
+                # Try multiple recognition methods for better accuracy
+                text = None
+                
+                # Primary: Google Speech Recognition
+                try:
+                    text = self.speech_recognizer.recognize_google(audio, language='en-US')
+                    print(f"✅ Google: {text}")
+                except sr.UnknownValueError:
+                    print("❌ Google couldn't understand audio")
+                except sr.RequestError as e:
+                    print(f"❌ Google error: {e}")
+                
+                # Fallback: Try with different language models
+                if not text:
+                    try:
+                        text = self.speech_recognizer.recognize_google(audio, language='en-GB')
+                        print(f"✅ Google UK: {text}")
+                    except:
+                        pass
+                
+                # If we got text, process it
                 if text:
+                    text = text.strip().lower()
+                    print(f"🎤 Speech recognized: '{text}'")
+                    
+                    # Process voice commands first
+                    if self._process_voice_command(text):
+                        return
+                    
+                    # If not a command, type the text
                     pyautogui.write(text, interval=self.config.typing_interval)
-                    print(f"🎤 Speech recognized: {text}")
-        except (sr.UnknownValueError, sr.RequestError, sr.WaitTimeoutError):
-            pass
+                    print(f"📝 Typed: {text}")
+                else:
+                    print("❌ Could not understand speech. Please try again.")
+                    
+        except sr.WaitTimeoutError:
+            print("⏰ Speech timeout - no audio detected")
+        except Exception as e:
+            print(f"❌ Speech error: {e}")
+    
+    def _process_voice_command(self, text: str) -> bool:
+        """Process voice commands and return True if command was processed"""
+        text = text.lower().strip()
+        
+        # Voice commands
+        if "open" in text:
+            if "calculator" in text or "calc" in text:
+                subprocess.Popen("calc.exe")
+                print("🧮 Calculator opened")
+                return True
+            elif "notepad" in text or "note" in text:
+                subprocess.Popen("notepad.exe")
+                print("📝 Notepad opened")
+                return True
+            elif "browser" in text or "chrome" in text or "web" in text:
+                webbrowser.open("https://www.google.com")
+                print("🌐 Browser opened")
+                return True
+            elif "google" in text:
+                webbrowser.open("https://www.google.com")
+                print("🌐 Google opened")
+                return True
+        
+        elif "volume" in text:
+            if "up" in text or "increase" in text:
+                pyautogui.press("volumeup")
+                print("🔊 Volume increased")
+                return True
+            elif "down" in text or "decrease" in text:
+                pyautogui.press("volumedown")
+                print("🔉 Volume decreased")
+                return True
+            elif "mute" in text:
+                pyautogui.press("volumemute")
+                print("🔇 Volume muted")
+                return True
+        
+        elif "press" in text:
+            if "enter" in text:
+                pyautogui.press("enter")
+                print("⏎ Enter pressed")
+                return True
+            elif "space" in text:
+                pyautogui.press("space")
+                print("␣ Space pressed")
+                return True
+            elif "tab" in text:
+                pyautogui.press("tab")
+                print("⇥ Tab pressed")
+                return True
+            elif "escape" in text or "esc" in text:
+                pyautogui.press("escape")
+                print("⎋ Escape pressed")
+                return True
+        
+        elif "close" in text or "quit" in text:
+            if "application" in text or "app" in text:
+                pyautogui.hotkey("alt", "f4")
+                print("❌ Application closed")
+                return True
+            elif "window" in text:
+                pyautogui.hotkey("alt", "f4")
+                print("❌ Window closed")
+                return True
+        
+        elif "screenshot" in text or "screen shot" in text:
+            pyautogui.hotkey("win", "shift", "s")
+            print("📸 Screenshot taken")
+            return True
+        
+        return False
             
     def draw_ui(self, frame: np.ndarray, gesture: GestureType, fps: float):
         """
@@ -466,115 +593,7 @@ class HandGestureRecognizer:
             cv2.putText(frame, instruction, (10, 30 + i * 25), 
                        cv2.FONT_HERSHEY_PLAIN, 0.7, (255, 255, 255), 1)
         
-        # Draw live transcription if available
-        if hasattr(self, 'jarvis') and self.jarvis and self.jarvis.get_live_transcription():
-            transcription = self.jarvis.get_live_transcription()
-            # Wrap long text
-            if len(transcription) > 50:
-                transcription = transcription[:47] + "..."
-            cv2.putText(frame, f"Live: {transcription}", (10, height - 60), 
-                       cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 255), 2)
-        
-        # Draw audio wave visualization
-        if hasattr(self, 'jarvis') and self.jarvis:
-            self._draw_audio_waves(frame, self.jarvis.get_audio_waves(), self.jarvis.get_audio_level())
     
-    def _draw_audio_waves(self, frame, wave_data, audio_level):
-        """Draw professional audio meter/equalizer like audio software"""
-        if not wave_data:
-            return
-            
-        height, width = frame.shape[:2]
-        
-        # Audio meter position (bottom right)
-        meter_x = width - 450
-        meter_y = height - 150
-        
-        # Draw background for audio meter
-        cv2.rectangle(frame, (meter_x - 10, meter_y - 120), (meter_x + 420, meter_y + 20), (20, 20, 20), -1)
-        cv2.rectangle(frame, (meter_x - 10, meter_y - 120), (meter_x + 420, meter_y + 20), (100, 100, 100), 2)
-        
-        # Draw audio meter bars (like VU meter or equalizer)
-        bar_width = 15
-        bar_spacing = 20
-        
-        for i, bar_data in enumerate(wave_data):
-            bar_x = meter_x + (i * bar_spacing)
-            bar_height = int(bar_data['level'] * 100)  # Height based on audio level
-            bar_y = meter_y - bar_height
-            
-            # Color based on frequency band and level
-            freq_band = bar_data['frequency_band']
-            level = bar_data['level']
-            
-            if freq_band < 0.3:  # Low frequencies (bass) - Red to Orange
-                color = (0, int(255 * level), int(255 * (1 - level)))
-            elif freq_band < 0.7:  # Mid frequencies (vocals) - Green to Yellow
-                color = (int(255 * level), 255, 0)
-            else:  # High frequencies (treble) - Blue to Cyan
-                color = (int(255 * level), int(255 * level), 255)
-            
-            # Draw the bar
-            cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_width, meter_y), color, -1)
-            
-            # Draw bar outline
-            cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_width, meter_y), (200, 200, 200), 1)
-            
-            # Add peak indicator (white line at peak level)
-            if level > 0.8:
-                peak_y = meter_y - int(0.8 * 100)
-                cv2.line(frame, (bar_x, peak_y), (bar_x + bar_width, peak_y), (255, 255, 255), 2)
-        
-        # Draw VU meter scale (decibel markings)
-        for db in range(0, 101, 20):  # 0, 20, 40, 60, 80, 100
-            scale_y = meter_y - int(db)
-            scale_x = meter_x - 5
-            cv2.line(frame, (scale_x, scale_y), (scale_x + 5, scale_y), (150, 150, 150), 1)
-            cv2.putText(frame, str(db), (scale_x - 25, scale_y + 5), 
-                       cv2.FONT_HERSHEY_PLAIN, 0.6, (150, 150, 150), 1)
-        
-        # Draw main VU meter (large vertical bar)
-        vu_x = meter_x + 350
-        vu_width = 30
-        vu_height = 100
-        
-        # VU meter background
-        cv2.rectangle(frame, (vu_x, meter_y - vu_height), (vu_x + vu_width, meter_y), (40, 40, 40), -1)
-        cv2.rectangle(frame, (vu_x, meter_y - vu_height), (vu_x + vu_width, meter_y), (200, 200, 200), 2)
-        
-        # VU meter fill
-        vu_fill_height = int(audio_level * vu_height)
-        vu_fill_y = meter_y - vu_fill_height
-        
-        # Color based on audio level (green -> yellow -> red)
-        if audio_level < 0.6:
-            vu_color = (0, int(255 * audio_level / 0.6), 0)  # Green
-        elif audio_level < 0.8:
-            vu_color = (int(255 * (audio_level - 0.6) / 0.2), 255, 0)  # Yellow
-        else:
-            vu_color = (255, int(255 * (1 - (audio_level - 0.8) / 0.2)), 0)  # Red
-        
-        cv2.rectangle(frame, (vu_x, vu_fill_y), (vu_x + vu_width, meter_y), vu_color, -1)
-        
-        # VU meter scale markings
-        for i in range(0, 101, 25):  # 0, 25, 50, 75, 100
-            scale_y = meter_y - int(i * vu_height / 100)
-            cv2.line(frame, (vu_x - 5, scale_y), (vu_x, scale_y), (200, 200, 200), 1)
-            cv2.putText(frame, str(i), (vu_x - 25, scale_y + 5), 
-                       cv2.FONT_HERSHEY_PLAIN, 0.6, (200, 200, 200), 1)
-        
-        # Draw audio level text
-        level_text = f"LEVEL: {int(audio_level * 100)}%"
-        cv2.putText(frame, level_text, (meter_x, meter_y + 40), 
-                   cv2.FONT_HERSHEY_PLAIN, 1.0, (255, 255, 255), 2)
-        
-        # Draw frequency labels
-        cv2.putText(frame, "BASS", (meter_x, meter_y + 60), 
-                   cv2.FONT_HERSHEY_PLAIN, 0.7, (0, 255, 255), 1)
-        cv2.putText(frame, "MID", (meter_x + 150, meter_y + 60), 
-                   cv2.FONT_HERSHEY_PLAIN, 0.7, (0, 255, 0), 1)
-        cv2.putText(frame, "TREBLE", (meter_x + 300, meter_y + 60), 
-                   cv2.FONT_HERSHEY_PLAIN, 0.7, (255, 0, 255), 1)
 
 
 class JARVISVoiceController:

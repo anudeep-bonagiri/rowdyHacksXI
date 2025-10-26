@@ -12,6 +12,9 @@ autopy>=4.0.0
 SpeechRecognition>=3.10.0
 PyAudio>=0.2.11
 
+# GUI dependencies
+Pillow>=9.0.0
+
 # Optional: Enhanced audio processing
 # pyaudio>=0.2.11  # Uncomment if PyAudio installation fails
 

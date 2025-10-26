@@ -8,7 +8,7 @@ with voice commands for hands-free computing.
 
 Features:
 - Mouse control with hand tracking
-- Multi-gesture recognition (click, drag, scroll, YouTube)
+- Multi-gesture recognition (click, drag, scroll)
 - Voice control with JARVIS integration
 - Real-time performance
 - No GUI - pure functionality
@@ -45,7 +45,6 @@ class GestureType(Enum):
     SCROLL_UP = "scroll_up"
     SCROLL_DOWN = "scroll_down"
     SPEECH = "speech"
-    YOUTUBE = "youtube"
     NONE = "none"
 
 
@@ -103,7 +102,6 @@ class HandGestureRecognizer:
         self.last_mouse_update = 0  # Track last mouse update time
         self.mouse_update_interval = 50  # Update mouse every 50ms
         self.stable_gesture_count = 0  # Count consecutive stable gestures
-        self.youtube_cooldown = False  # YouTube gesture cooldown
         self.stability_buffer = []
         self.drag_hold = False
         
@@ -179,7 +177,7 @@ class HandGestureRecognizer:
             fingers.append(1)
         else:
             fingers.append(0)
-            
+                
         # Middle finger (landmark 12)
         if landmarks[12][2] < landmarks[10][2]:
             fingers.append(1)
@@ -215,12 +213,9 @@ class HandGestureRecognizer:
             return GestureType.SPEECH
         elif fingers == [0, 1, 1, 0, 1]:  # Index, middle, pinky up
             return GestureType.DRAG
-        # YouTube (thumb + index touching)
-        elif fingers == [1, 1, 0, 0, 0]:
-            return GestureType.YOUTUBE
         else:
             return GestureType.NONE
-    
+        
     def execute_gesture(self, gesture: GestureType, landmarks: List, frame: np.ndarray):
         """
         Execute the appropriate action based on gesture type
@@ -294,21 +289,17 @@ class HandGestureRecognizer:
             self._handle_speech()
             self._stop_drag()
             
-        elif gesture == GestureType.YOUTUBE:
-            self._handle_youtube()
-            self._stop_drag()
-        
         # Update previous position
         self.previous_x = self.current_x
         self.previous_y = self.current_y
-    
+        
     def _handle_mouse_move(self):
         """Handle mouse movement"""
         try:
             autopy.mouse.move(self.current_x, self.current_y)
         except Exception as e:
             print(f"Mouse move error: {e}")
-    
+        
     def _handle_click(self, x: int, y: int, frame: np.ndarray):
         """Handle left click"""
         try:
@@ -316,7 +307,7 @@ class HandGestureRecognizer:
             print("Left click executed")
         except Exception as e:
             print(f"Click error: {e}")
-    
+            
     def _handle_double_click(self, x: int, y: int, frame: np.ndarray):
         """Handle double click"""
         try:
@@ -326,7 +317,7 @@ class HandGestureRecognizer:
             print("Double click executed")
         except Exception as e:
             print(f"Double click error: {e}")
-    
+        
     def _handle_right_click(self, x: int, y: int, frame: np.ndarray):
         """Handle right click"""
         try:
@@ -334,7 +325,7 @@ class HandGestureRecognizer:
             print("Right click executed")
         except Exception as e:
             print(f"Right click error: {e}")
-    
+            
     def _handle_drag(self):
         """Handle drag operation"""
         if not self.drag_hold:
@@ -344,7 +335,7 @@ class HandGestureRecognizer:
                 print("Drag started")
             except Exception as e:
                 print(f"Drag start error: {e}")
-    
+        
     def _stop_drag(self):
         """Stop drag operation"""
         if self.drag_hold:
@@ -354,7 +345,7 @@ class HandGestureRecognizer:
                 print("Drag stopped")
             except Exception as e:
                 print(f"Drag stop error: {e}")
-    
+            
     def _handle_scroll_up(self):
         """Handle scroll up"""
         try:
@@ -362,7 +353,7 @@ class HandGestureRecognizer:
             print("Scroll up executed")
         except Exception as e:
             print(f"Scroll up error: {e}")
-    
+        
     def _handle_scroll_down(self):
         """Handle scroll down"""
         try:
@@ -412,9 +403,6 @@ class HandGestureRecognizer:
                 elif "terminal" in command:
                     subprocess.run(["open", "-a", "Terminal"])
                     print("Opening Terminal...")
-                elif "youtube" in command:
-                    webbrowser.open("https://www.youtube.com/")
-                    print("Opening YouTube...")
                 elif "google" in command:
                     webbrowser.open("https://www.google.com/")
                     print("Opening Google...")
@@ -467,46 +455,9 @@ class HandGestureRecognizer:
             
             else:
                 print(f"Unknown voice command: {command}")
-                
+            
         except Exception as e:
             print(f"Voice command processing error: {e}")
-    
-    def _handle_youtube(self):
-        """Handle YouTube opening gesture - opens Chrome and navigates to YouTube"""
-        if not self.youtube_cooldown:
-            try:
-                # Try to open Chrome specifically first
-                chrome_paths = [
-                    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-                    '/usr/bin/google-chrome',
-                    '/usr/bin/chromium-browser',
-                    'chrome',
-                    'google-chrome'
-                ]
-                
-                chrome_opened = False
-                for chrome_path in chrome_paths:
-                    try:
-                        # Open Chrome with YouTube URL
-                        subprocess.run([chrome_path, 'https://www.youtube.com/'], 
-                                     check=True, timeout=5)
-                        print("Opening YouTube in Chrome...")
-                        chrome_opened = True
-                        break
-                    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-                        continue
-                
-                # Fallback to default browser if Chrome not found
-                if not chrome_opened:
-                    webbrowser.open("https://www.youtube.com/")
-                    print("Opening YouTube in default browser...")
-                
-                # Set cooldown to prevent multiple opens
-                self.youtube_cooldown = True
-                threading.Timer(3.0, lambda: setattr(self, 'youtube_cooldown', False)).start()
-                
-            except Exception as e:
-                print(f"YouTube opening error: {e}")
     
     def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, GestureType]:
         """
@@ -591,10 +542,9 @@ def main():
     print("  ✋ All fingers down: Scroll down")
     print("  🖕 Pinky up: Voice command")
     print("  ✋ Index+Middle+Pinky: Drag")
-    print("  📺 Thumb+Index: Open YouTube")
     print("\n🎤 Voice Commands:")
     print("  'Open Chrome/Safari/Finder/Terminal'")
-    print("  'Open YouTube/Google'")
+    print("  'Open Google'")
     print("  'Volume up/down/mute'")
     print("  'Type [text]'")
     print("  'Press enter/space/tab/escape'")
@@ -608,7 +558,7 @@ def main():
             if not ret:
                 print("Failed to read camera frame")
                 break
-            
+                
             # Process frame
             processed_frame, gesture = recognizer.process_frame(frame)
             
@@ -634,8 +584,7 @@ def main():
                 print("  ✋ All fingers down: Scroll down")
                 print("  🖕 Pinky up: Voice command")
                 print("  ✋ Index+Middle+Pinky: Drag")
-                print("  📺 Thumb+Index: Open YouTube")
-    
+                
     except KeyboardInterrupt:
         print("\n👋 Shutting down jarvAIs...")
     

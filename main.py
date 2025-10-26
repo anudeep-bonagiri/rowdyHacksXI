@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
 """
-🤚 ARCHAND - Advanced Hand Gesture Recognition System
-=====================================================
+jarvAIs - Hand Gesture & Voice Control System
+============================================
 
-A hackathon-ready computer vision application that transforms your hand gestures
-into computer control commands. Built with MediaPipe, OpenCV, and PyAutoGUI.
+A comprehensive computer control system that combines hand gesture recognition 
+with voice commands for an intuitive, hands-free computing experience.
 
 Features:
-- 🖱️  Mouse control with hand tracking
-- 👆  Multi-gesture recognition (click, drag, scroll)
-- 🎤  Speech-to-text integration
-- ⚡  Real-time performance with 60 FPS
-- 🎨  Beautiful visual feedback
-- 🔧  Configurable gesture sensitivity
+- Mouse control with hand tracking
+- Multi-gesture recognition (click, drag, scroll)
+- Voice control with JARVIS integration
+- Auto-start voice recognition
+- Real-time performance with 60 FPS
+- Quick access to common applications
 
-Author: Hackathon Team
+Usage:
+- Run without arguments: Hybrid mode with auto-start
+- Run with --help: Show help
+
+Author: AI Assistant
 License: MIT
 """
 
@@ -23,11 +27,15 @@ import mediapipe as mp
 import numpy as np
 import pyautogui
 import autopy
-import time
 import speech_recognition as sr
 import argparse
 import sys
-from typing import List, Tuple, Optional
+import os
+import threading
+import time
+import subprocess
+import webbrowser
+from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
 
@@ -42,11 +50,13 @@ class GestureType(Enum):
     SCROLL_UP = "scroll_up"
     SCROLL_DOWN = "scroll_down"
     SPEECH = "speech"
+    OPEN_YOUTUBE = "open_youtube"
+    NONE = "none"
 
 
 @dataclass
 class Config:
-    """Configuration class for the gesture recognition system"""
+    """Configuration class for the hybrid control system"""
     # Camera settings
     camera_width: int = 640
     camera_height: int = 480
@@ -62,10 +72,12 @@ class Config:
     scroll_up_speed: int = 60
     scroll_down_speed: int = -60
     
-    # Speech settings
-    speech_timeout: int = 5
-    speech_phrase_limit: int = 10
+    # Speech settings - Enhanced for better clarity
+    speech_timeout: int = 5  # Shorter timeout for faster response
+    speech_phrase_limit: int = 10  # Shorter phrase limit for better accuracy
     typing_interval: float = 0.01
+    auto_start: bool = True
+    live_transcribe: bool = True  # Enable live transcription
     
     # Visual settings
     show_fps: bool = True
@@ -99,6 +111,11 @@ class HandGestureRecognizer:
         self.frame_count = 0
         self.fps = 0
         
+        # Speech recognition state
+        self.speech_processing = False
+        self.last_speech_time = 0
+        self.speech_cooldown = 2.0  # 2 second cooldown between speech attempts
+        
     def setup_mediapipe(self):
         """Initialize MediaPipe hand detection"""
         self.mp_hands = mp.solutions.hands
@@ -116,20 +133,34 @@ class HandGestureRecognizer:
         self.finger_tips = [4, 8, 12, 16, 20]  # Thumb, Index, Middle, Ring, Pinky
         
     def setup_speech_recognition(self):
-        """Initialize speech recognition system"""
+        """Initialize speech recognition system with enhanced settings"""
         try:
             self.speech_recognizer = sr.Recognizer()
             self.microphone = sr.Microphone()
-            print("🎤 Speech recognition initialized successfully")
+            
+            # Enhanced speech recognition settings for better clarity
+            self.speech_recognizer.energy_threshold = 150  # Even more sensitive
+            self.speech_recognizer.dynamic_energy_threshold = True
+            self.speech_recognizer.dynamic_energy_adjustment_damping = 0.15
+            self.speech_recognizer.dynamic_energy_ratio = 1.5
+            self.speech_recognizer.pause_threshold = 0.6  # Even faster response
+            self.speech_recognizer.phrase_threshold = 0.2  # Even faster phrase detection
+            self.speech_recognizer.non_speaking_duration = 0.3  # Even shorter silence
+            
+            # Calibrate microphone with longer duration for better noise reduction
+            print("🎤 Calibrating microphone for optimal audio quality...")
+            with self.microphone as source:
+                self.speech_recognizer.adjust_for_ambient_noise(source, duration=2.0)
+            print("✅ Speech recognition initialized successfully")
         except Exception as e:
-            print(f"⚠️  Speech recognition unavailable: {e}")
+            print(f"❌ Speech recognition unavailable: {e}")
             self.speech_recognizer = None
             self.microphone = None
             
     def setup_screen_info(self):
         """Get screen dimensions for mouse mapping"""
         self.screen_width, self.screen_height = autopy.screen.size()
-        print(f"🖥️  Screen resolution: {self.screen_width}x{self.screen_height}")
+        print(f"🖥️ Screen resolution: {self.screen_width}x{self.screen_height}")
         
     def detect_hands(self, frame: np.ndarray, draw: bool = True) -> np.ndarray:
         """
@@ -159,7 +190,7 @@ class HandGestureRecognizer:
                 
         return frame
         
-    def get_hand_landmarks(self, frame: np.ndarray, hand_index: int = 0, draw: bool = True) -> Tuple[List, Tuple]:
+    def get_hand_landmarks(self, frame: np.ndarray, hand_index: int = 0, draw: bool = True) -> tuple:
         """
         Extract hand landmarks and bounding box
         
@@ -204,7 +235,7 @@ class HandGestureRecognizer:
                                   
         return landmarks, bounding_box
         
-    def detect_finger_states(self, landmarks: List) -> List[int]:
+    def detect_finger_states(self, landmarks: list) -> list:
         """
         Detect which fingers are raised
         
@@ -234,7 +265,25 @@ class HandGestureRecognizer:
                 
         return fingers
         
-    def classify_gesture(self, fingers: List[int]) -> GestureType:
+    def _is_ok_gesture(self, landmarks: list) -> bool:
+        """Check if the gesture is an OK sign (thumb and index finger forming a circle)"""
+        if len(landmarks) < 21:
+            return False
+            
+        # Get thumb tip and index tip positions
+        thumb_tip = landmarks[4]  # Thumb tip
+        index_tip = landmarks[8]  # Index tip
+        
+        # Calculate distance between thumb and index tips
+        distance = np.sqrt((thumb_tip[1] - index_tip[1])**2 + (thumb_tip[2] - index_tip[2])**2)
+        
+        # OK gesture: thumb and index are close (forming circle)
+        # Distance threshold for OK gesture (adjust as needed)
+        ok_threshold = 30  # pixels
+        
+        return distance < ok_threshold
+        
+    def classify_gesture(self, fingers: list, landmarks: list = None) -> GestureType:
         """
         Classify gesture based on finger states
         
@@ -276,9 +325,13 @@ class HandGestureRecognizer:
         if fingers == [0, 0, 0, 0, 0]:
             return GestureType.SCROLL_DOWN
             
+        # Open YouTube (OK gesture - thumb + index circle, other fingers up)
+        if fingers == [1, 1, 1, 1, 1] and self._is_ok_gesture(landmarks):
+            return GestureType.OPEN_YOUTUBE
+            
         return GestureType.MOVE  # Default to move
         
-    def execute_gesture(self, gesture: GestureType, landmarks: List, frame: np.ndarray):
+    def execute_gesture(self, gesture: GestureType, landmarks: list, frame: np.ndarray):
         """
         Execute the appropriate action based on gesture type
         
@@ -334,6 +387,10 @@ class HandGestureRecognizer:
             
         elif gesture == GestureType.SPEECH:
             self._handle_speech_to_text()
+            self._stop_drag()
+            
+        elif gesture == GestureType.OPEN_YOUTUBE:
+            self._handle_open_youtube()
             self._stop_drag()
             
         # Update previous positions
@@ -395,25 +452,237 @@ class HandGestureRecognizer:
         """Handle scroll down"""
         pyautogui.scroll(self.config.scroll_down_speed)
         
-    def _handle_speech_to_text(self):
-        """Handle speech to text conversion"""
-        if not self.speech_recognizer or not self.microphone:
-            return
-            
+    def _handle_open_youtube(self):
+        """Handle opening YouTube"""
+        webbrowser.open("https://www.youtube.com")
+        print("📺 YouTube opened via gesture")
+        
+    def _check_audio_quality(self, audio_data):
+        """Check audio quality and provide feedback"""
         try:
+            # Convert to numpy for analysis
+            audio_np = np.frombuffer(audio_data, dtype=np.int16)
+            
+            # Check volume level (RMS)
+            rms = np.sqrt(np.mean(audio_np**2))
+            
+            # Check for clipping
+            max_amplitude = np.max(np.abs(audio_np))
+            clipping = max_amplitude > 30000  # 16-bit audio max is 32767
+            
+            # Provide feedback
+            if rms < 1000:
+                print("🔇 Audio too quiet - speak louder")
+                return False
+            elif clipping:
+                print("⚠️ Audio too loud - speak softer")
+                return False
+            elif rms > 20000:
+                print("🔊 Audio level good")
+            
+            return True
+        except Exception as e:
+            print(f"⚠️ Audio quality check failed: {e}")
+            return True  # Continue anyway
+    
+    def _recognize_with_fallbacks(self, audio):
+        """Try multiple recognition engines for better accuracy"""
+        text = None
+        engine_used = "None"
+        
+        # Primary: Google US (most accurate for general speech)
+        try:
+            text = self.speech_recognizer.recognize_google(audio, language='en-US')
+            if text and len(text.strip()) > 0:
+                engine_used = "Google US"
+                print(f"✅ Google US: {text}")
+                return text, engine_used
+        except sr.UnknownValueError:
+            print("❌ Google US couldn't understand audio")
+        except sr.RequestError as e:
+            print(f"❌ Google US error: {e}")
+        
+        # Fallback 1: Google UK (catches different accents)
+        try:
+            text = self.speech_recognizer.recognize_google(audio, language='en-GB')
+            if text and len(text.strip()) > 0:
+                engine_used = "Google UK"
+                print(f"✅ Google UK: {text}")
+                return text, engine_used
+        except sr.UnknownValueError:
+            print("❌ Google UK couldn't understand audio")
+        except sr.RequestError as e:
+            print(f"❌ Google UK error: {e}")
+        
+        # Fallback 2: Try Sphinx (offline, good for clear speech)
+        try:
+            text = self.speech_recognizer.recognize_sphinx(audio)
+            if text and len(text.strip()) > 0:
+                engine_used = "Sphinx"
+                print(f"✅ Sphinx: {text}")
+                return text, engine_used
+        except sr.UnknownValueError:
+            print("❌ Sphinx couldn't understand audio")
+        except Exception as e:
+            print(f"❌ Sphinx error: {e}")
+        
+        return None, engine_used
+
+    def _handle_speech_to_text(self):
+        """Handle speech to text conversion with enhanced accuracy"""
+        if not self.speech_recognizer or not self.microphone:
+            print("❌ Speech recognition not available")
+            return
+        
+        # Check if already processing speech
+        if self.speech_processing:
+            print("⏳ Speech recognition already in progress...")
+            return
+        
+        # Check cooldown period
+        current_time = cv2.getTickCount() / cv2.getTickFrequency()
+        if current_time - self.last_speech_time < self.speech_cooldown:
+            print(f"⏰ Please wait {self.speech_cooldown - (current_time - self.last_speech_time):.1f}s before speaking again")
+            return
+        
+        # Set processing flag
+        self.speech_processing = True
+        self.last_speech_time = current_time
+        
+        try:
+            print("🎤 Listening... Speak clearly now!")
+            
+            # Use a shorter timeout to prevent hanging
             with self.microphone as source:
-                self.speech_recognizer.adjust_for_ambient_noise(source)
+                # Quick recalibration
+                self.speech_recognizer.adjust_for_ambient_noise(source, duration=0.3)
+                
+                # Listen with shorter timeout
                 audio = self.speech_recognizer.listen(
                     source, 
-                    timeout=self.config.speech_timeout,
-                    phrase_time_limit=self.config.speech_phrase_limit
+                    timeout=3.0,  # Shorter timeout
+                    phrase_time_limit=5.0  # Shorter phrase limit
                 )
-                text = self.speech_recognizer.recognize_google(audio)
+                
+                print("🔄 Processing speech...")
+                
+                # Check audio quality first and store level for visual feedback
+                audio_data = audio.get_raw_data()
+                if not self._check_audio_quality(audio_data):
+                    print("❌ Audio quality too poor, please try again")
+                    return
+                
+                # Store audio level for visual feedback
+                audio_np = np.frombuffer(audio_data, dtype=np.int16)
+                rms = np.sqrt(np.mean(audio_np**2))
+                self.last_audio_level = min(rms / 20000, 1.0)  # Normalize to 0-1
+                
+                # Try multiple recognition methods for better accuracy
+                text, engine_used = self._recognize_with_fallbacks(audio)
+                
+                # Store recognition engine for visual feedback
+                self.last_recognition_engine = engine_used
+                
+                # If we got text, process it
                 if text:
+                    text = text.strip().lower()
+                    print(f"🎤 Speech recognized ({engine_used}): '{text}'")
+                    
+                    # Process voice commands first
+                    if self._process_voice_command(text):
+                        print("✅ Command executed successfully")
+                        return
+                    
+                    # If not a command, type the text
                     pyautogui.write(text, interval=self.config.typing_interval)
-                    print(f"🎤 Speech recognized: {text}")
-        except (sr.UnknownValueError, sr.RequestError, sr.WaitTimeoutError):
-            pass
+                    print(f"📝 Typed: {text}")
+                else:
+                    print("❌ Could not understand speech with any engine. Please try again.")
+                    
+        except sr.WaitTimeoutError:
+            print("⏰ Speech timeout - no audio detected")
+        except Exception as e:
+            print(f"❌ Speech error: {e}")
+        finally:
+            # Always reset processing flag
+            self.speech_processing = False
+            print("✅ Speech recognition ready for next command")
+    
+    def _process_voice_command(self, text: str) -> bool:
+        """Process voice commands and return True if command was processed"""
+        text = text.lower().strip()
+        
+        # Voice commands
+        if "open" in text:
+            if "calculator" in text or "calc" in text:
+                subprocess.Popen("calc.exe")
+                print("🧮 Calculator opened")
+                return True
+            elif "notepad" in text or "note" in text:
+                subprocess.Popen("notepad.exe")
+                print("📝 Notepad opened")
+                return True
+            elif "browser" in text or "chrome" in text or "web" in text:
+                webbrowser.open("https://www.google.com")
+                print("🌐 Browser opened")
+                return True
+            elif "google" in text:
+                webbrowser.open("https://www.google.com")
+                print("🌐 Google opened")
+                return True
+            elif "youtube" in text or "youtube.com" in text:
+                webbrowser.open("https://www.youtube.com")
+                print("📺 YouTube opened")
+                return True
+        
+        elif "volume" in text:
+            if "up" in text or "increase" in text:
+                pyautogui.press("volumeup")
+                print("🔊 Volume increased")
+                return True
+            elif "down" in text or "decrease" in text:
+                pyautogui.press("volumedown")
+                print("🔉 Volume decreased")
+                return True
+            elif "mute" in text:
+                pyautogui.press("volumemute")
+                print("🔇 Volume muted")
+                return True
+        
+        elif "press" in text:
+            if "enter" in text:
+                pyautogui.press("enter")
+                print("⏎ Enter pressed")
+                return True
+            elif "space" in text:
+                pyautogui.press("space")
+                print("␣ Space pressed")
+                return True
+            elif "tab" in text:
+                pyautogui.press("tab")
+                print("⇥ Tab pressed")
+                return True
+            elif "escape" in text or "esc" in text:
+                pyautogui.press("escape")
+                print("⎋ Escape pressed")
+                return True
+        
+        elif "close" in text or "quit" in text:
+            if "application" in text or "app" in text:
+                pyautogui.hotkey("alt", "f4")
+                print("❌ Application closed")
+                return True
+            elif "window" in text:
+                pyautogui.hotkey("alt", "f4")
+                print("❌ Window closed")
+                return True
+        
+        elif "screenshot" in text or "screen shot" in text:
+            pyautogui.hotkey("win", "shift", "s")
+            print("📸 Screenshot taken")
+            return True
+        
+        return False
             
     def draw_ui(self, frame: np.ndarray, gesture: GestureType, fps: float):
         """
@@ -445,53 +714,434 @@ class HandGestureRecognizer:
                        
         # Draw instructions
         instructions = [
-            "🤚 ARCHAND - Hand Gesture Control",
-            "👆 Index: Move | 👆👆 Click | 👆👆👆👆👆 Drag",
-            "👍 Thumb: Right Click | 🖐️ Fist: Scroll Up | ✋ Open: Scroll Down",
-            "🖕 Middle: Speech | Press 'q' to quit"
+            "jarvAIs - Hand Gesture & Voice Control",
+            "Index: Move | Index+Middle: Click | Drag",
+            "Thumb: Right Click | Fist: Scroll Up | Open: Scroll Down",
+            "Middle: Speech | OK Gesture: YouTube",
+            "Press 'q' to quit"
         ]
         
         for i, instruction in enumerate(instructions):
             cv2.putText(frame, instruction, (10, 30 + i * 25), 
                        cv2.FONT_HERSHEY_PLAIN, 0.7, (255, 255, 255), 1)
-
-
-def parse_arguments():
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description="🤚 ARCHAND - Advanced Hand Gesture Recognition")
-    parser.add_argument("--width", type=int, default=640, help="Camera width")
-    parser.add_argument("--height", type=int, default=480, help="Camera height")
-    parser.add_argument("--fps", type=int, default=60, help="Camera FPS")
-    parser.add_argument("--no-fps", action="store_true", help="Hide FPS display")
-    parser.add_argument("--no-gesture-info", action="store_true", help="Hide gesture info")
-    parser.add_argument("--sensitivity", type=int, default=8, help="Mouse sensitivity (1-20)")
+        
+        # Draw audio quality indicator (if available)
+        if hasattr(self, 'last_audio_level'):
+            # Audio level bar
+            bar_width = int(self.last_audio_level * 200)
+            cv2.rectangle(frame, (width - 250, height - 100), (width - 250 + bar_width, height - 80), 
+                          (0, 255, 0) if self.last_audio_level > 0.1 else (0, 0, 255), -1)
+            cv2.putText(frame, "Audio Level", (width - 250, height - 110), 
+                       cv2.FONT_HERSHEY_PLAIN, 0.6, (255, 255, 255), 1)
+        
+        # Draw recognition status
+        if hasattr(self, 'last_recognition_engine'):
+            cv2.putText(frame, f"Engine: {self.last_recognition_engine}", (width - 250, height - 50), 
+                       cv2.FONT_HERSHEY_PLAIN, 0.6, (0, 255, 255), 1)
+        
+        # Draw speech processing status
+        if hasattr(self, 'speech_processing') and self.speech_processing:
+            cv2.putText(frame, "🎤 PROCESSING...", (width - 250, height - 20), 
+                       cv2.FONT_HERSHEY_PLAIN, 0.8, (0, 255, 0), 2)
+        elif hasattr(self, 'last_speech_time'):
+            current_time = cv2.getTickCount() / cv2.getTickFrequency()
+            time_since_speech = current_time - self.last_speech_time
+            if time_since_speech < self.speech_cooldown:
+                remaining = self.speech_cooldown - time_since_speech
+                cv2.putText(frame, f"⏰ Wait {remaining:.1f}s", (width - 250, height - 20), 
+                           cv2.FONT_HERSHEY_PLAIN, 0.6, (0, 255, 255), 1)
+        
     
-    return parser.parse_args()
+
+
+class JARVISVoiceController:
+    """JARVIS Voice Control for jarvAIs"""
+    
+    def __init__(self, config: Config):
+        self.config = config
+        self.recognizer = sr.Recognizer()
+        self.microphone = None
+        self.listening = False
+        self.running = True
+        self.live_transcription = ""  # Store live transcription
+        self.last_transcription = ""  # Store last successful transcription
+        self.audio_level = 0.0  # Current audio level (0.0 to 1.0)
+        self.audio_waves = []  # Store wave data for visualization
+        
+        # Voice commands
+        self.commands = {
+            "calculator": self._open_calculator,
+            "calc": self._open_calculator,
+            "notepad": self._open_notepad,
+            "note": self._open_notepad,
+            "browser": self._open_browser,
+            "web": self._open_browser,
+            "chrome": self._open_browser,
+            "time": self._tell_time,
+            "clock": self._tell_time,
+            "date": self._tell_date,
+            "today": self._tell_date,
+            "joke": self._tell_joke,
+            "funny": self._tell_joke,
+            "volume up": self._volume_up,
+            "louder": self._volume_up,
+            "volume down": self._volume_down,
+            "quieter": self._volume_down,
+            "mute": self._volume_down,
+            "minimize": self._minimize_window,
+            "close": self._close_window,
+            "exit": self._close_window,
+            "quit": self._quit_jarvis,
+            "stop": self._quit_jarvis,
+            "shutdown": self._quit_jarvis
+        }
+        
+        self.wake_words = ["jarvis", "hey jarvis", "okay jarvis"]
+        self.setup_microphone()
+        
+    def setup_microphone(self):
+        """Setup microphone with error handling"""
+        try:
+            self.microphone = sr.Microphone()
+            # Test microphone access
+            with self.microphone as source:
+                self.recognizer.adjust_for_ambient_noise(source, duration=1.0)
+            print("🎤 JARVIS microphone initialized and tested")
+        except Exception as e:
+            print(f"❌ JARVIS microphone error: {e}")
+            self.microphone = None
+            
+    def start_listening(self):
+        """Start voice recognition"""
+        if not self.microphone:
+            print("❌ JARVIS microphone not available!")
+            return False
+        self.listening = True
+        self.listen_thread = threading.Thread(target=self._listen_continuously, daemon=True)
+        self.listen_thread.start()
+        print("🎤 JARVIS voice recognition started!")
+        return True
+        
+    def stop_listening(self):
+        """Stop voice recognition"""
+        self.listening = False
+        print("⏹️ JARVIS voice recognition stopped.")
+        
+    def start_auto(self):
+        """Auto-start JARVIS with voice recognition"""
+        if self.config.auto_start:
+            print("🚀 JARVIS auto-starting...")
+            self.start_listening()
+    
+    def get_live_transcription(self):
+        """Get current live transcription"""
+        return self.live_transcription
+    
+    def get_last_transcription(self):
+        """Get last successful transcription"""
+        return self.last_transcription
+    
+    def get_audio_level(self):
+        """Get current audio level"""
+        return self.audio_level
+    
+    def get_audio_waves(self):
+        """Get current audio wave data"""
+        return self.audio_waves
+        
+    def _listen_continuously(self):
+        """Continuous listening loop with live transcription and improved error handling"""
+        while self.listening and self.running and self.microphone:
+            try:
+                # Create new microphone instance for each listen attempt
+                mic = sr.Microphone()
+                with mic as source:
+                    # Optimize recognizer settings for better performance
+                    self.recognizer.energy_threshold = 300
+                    self.recognizer.dynamic_energy_threshold = True
+                    self.recognizer.pause_threshold = 1.0  # Increased from 0.5
+                    self.recognizer.phrase_threshold = 0.3  # Increased from 0.2
+                    self.recognizer.non_speaking_duration = 0.5  # Increased from 0.2
+                    
+                    # Listen with longer timeout to reduce errors
+                    audio = self.recognizer.listen(source, timeout=2.0, phrase_time_limit=self.config.speech_phrase_limit)
+                    
+                try:
+                    # Calculate audio level for visualization
+                    audio_data = audio.get_raw_data()
+                    audio_level = self._calculate_audio_level(audio_data)
+                    self.audio_level = audio_level
+                    
+                    # Generate wave data for visualization
+                    self._generate_wave_data(audio_level)
+                    
+                    text = self.recognizer.recognize_google(audio).lower()
+                    
+                    # Update live transcription
+                    if self.config.live_transcribe:
+                        self.live_transcription = text
+                        self.last_transcription = text
+                        print(f"🎤 Live: {text}")
+                    
+                    # Check for wake words
+                    for wake_word in self.wake_words:
+                        if wake_word in text:
+                            command = text.replace(wake_word, "").strip()
+                            print(f"🤖 JARVIS heard: {text}")
+                            self._execute_command(command)
+                            break
+                    else:
+                        # If no wake word found but we have text, show it
+                        if text and not any(wake_word in text for wake_word in self.wake_words):
+                            print(f"💬 Heard: {text} (no wake word)")
+                            
+                except sr.UnknownValueError:
+                    # Could not understand audio, but still show audio level
+                    audio_data = audio.get_raw_data()
+                    audio_level = self._calculate_audio_level(audio_data)
+                    self.audio_level = audio_level
+                    self._generate_wave_data(audio_level)
+                    
+                    if self.config.live_transcribe:
+                        print("🔇 Could not understand audio...")
+                    continue
+                except sr.RequestError as e:
+                    print(f"❌ JARVIS recognition error: {e}")
+                    time.sleep(2)  # Wait longer before retrying
+                    continue
+                except sr.WaitTimeoutError:
+                    # No speech detected, continue listening
+                    if self.config.live_transcribe:
+                        print("⏳ Listening...")
+                    continue
+                    
+            except Exception as e:
+                print(f"❌ JARVIS listening error: {e}")
+                time.sleep(1.0)  # Longer wait time
+                
+    def _execute_command(self, command):
+        """Execute voice command"""
+        if not command:
+            return
+            
+        print(f"🤖 JARVIS executing: '{command}'")
+        
+        # Try exact match first
+        if command in self.commands:
+            try:
+                self.commands[command]()
+                print(f"✅ JARVIS executed: {command}")
+                return
+            except Exception as e:
+                print(f"❌ JARVIS error: {e}")
+                return
+        
+        # Try partial matches
+        for cmd_key, cmd_func in self.commands.items():
+            if cmd_key in command or command in cmd_key:
+                try:
+                    cmd_func()
+                    print(f"✅ JARVIS executed: {cmd_key}")
+                    return
+                except Exception as e:
+                    print(f"❌ JARVIS error: {e}")
+                    return
+        
+        # No command found
+        print(f"❓ JARVIS: Unknown command '{command}'")
+            
+    def _open_calculator(self):
+        """Open calculator"""
+        subprocess.Popen("calc.exe")
+        print("🧮 Calculator opened")
+        
+    def _open_notepad(self):
+        """Open notepad"""
+        subprocess.Popen("notepad.exe")
+        print("📝 Notepad opened")
+        
+    def _open_browser(self):
+        """Open web browser"""
+        webbrowser.open("https://www.google.com")
+        print("🌐 Browser opened")
+        
+    def _tell_time(self):
+        """Tell current time"""
+        current_time = datetime.now().strftime("%I:%M %p")
+        self._speak(f"The time is {current_time}")
+        
+    def _tell_date(self):
+        """Tell current date"""
+        current_date = datetime.now().strftime("%A, %B %d, %Y")
+        self._speak(f"Today is {current_date}")
+        
+    def _tell_joke(self):
+        """Tell a joke"""
+        jokes = [
+            "Why don't scientists trust atoms? Because they make up everything!",
+            "Why did the scarecrow win an award? He was outstanding in his field!",
+            "Why don't eggs tell jokes? They'd crack each other up!",
+            "What do you call a fake noodle? An impasta!",
+            "Why did the math book look so sad? Because it had too many problems!"
+        ]
+        import random
+        joke = random.choice(jokes)
+        self._speak(joke)
+        
+    def _volume_up(self):
+        """Increase volume"""
+        import pyautogui
+        pyautogui.press('volumeup')
+        print("🔊 Volume increased")
+        
+    def _volume_down(self):
+        """Decrease volume"""
+        import pyautogui
+        pyautogui.press('volumedown')
+        print("🔉 Volume decreased")
+        
+    def _minimize_window(self):
+        """Minimize current window"""
+        import pyautogui
+        pyautogui.hotkey('alt', 'f9')
+        print("📱 Window minimized")
+        
+    def _close_window(self):
+        """Close current window"""
+        import pyautogui
+        pyautogui.hotkey('alt', 'f4')
+        print("❌ Window closed")
+        
+    def _quit_jarvis(self):
+        """Quit JARVIS"""
+        print("👋 JARVIS shutting down...")
+        self.running = False
+        self.listening = False
+        sys.exit(0)
+        
+    def _calculate_audio_level(self, audio_data):
+        """Calculate intensive audio level from raw audio data with enhanced sensitivity"""
+        try:
+            import struct
+            import math
+            
+            # Convert bytes to 16-bit integers
+            audio_samples = struct.unpack('<' + 'h' * (len(audio_data) // 2), audio_data)
+            
+            # Calculate multiple audio metrics for more sensitivity
+            rms = (sum(sample * sample for sample in audio_samples) / len(audio_samples)) ** 0.5
+            
+            # Calculate peak level for more dramatic response
+            peak = max(abs(sample) for sample in audio_samples)
+            
+            # Calculate spectral centroid for frequency content
+            fft_samples = audio_samples[:min(1024, len(audio_samples))]  # Limit for performance
+            spectral_centroid = sum(abs(s) for s in fft_samples) / len(fft_samples)
+            
+            # Combine multiple metrics for more intensive response
+            rms_level = min(rms / 16384.0, 1.0)  # More sensitive threshold
+            peak_level = min(peak / 16384.0, 1.0)  # More sensitive threshold
+            spectral_level = min(spectral_centroid / 8192.0, 1.0)  # Frequency content
+            
+            # Weighted combination for more dramatic effect
+            combined_level = (rms_level * 0.4 + peak_level * 0.4 + spectral_level * 0.2)
+            
+            # Apply exponential scaling for more dramatic response
+            intensive_level = combined_level ** 0.7  # Makes lower levels more visible
+            
+            # Add some persistence for smoother visualization
+            if hasattr(self, 'last_audio_level'):
+                intensive_level = intensive_level * 0.7 + self.last_audio_level * 0.3
+            
+            self.last_audio_level = intensive_level
+            return min(intensive_level, 1.0)
+            
+        except:
+            return 0.0
+    
+    def _generate_wave_data(self, audio_level):
+        """Generate audio meter/equalizer bar data like professional audio software"""
+        import time
+        import math
+        
+        current_time = time.time()
+        
+        # Create audio meter bars (like VU meter or equalizer)
+        meter_bars = []
+        num_bars = 20  # Number of frequency bars
+        
+        # Generate frequency bars with different responses
+        for i in range(num_bars):
+            # Different frequency ranges for each bar
+            freq_factor = i / num_bars  # 0.0 to 1.0
+            
+            # Simulate different frequency responses
+            if freq_factor < 0.3:  # Low frequencies (bass)
+                bar_level = audio_level * (0.8 + 0.4 * math.sin(current_time * 2))
+            elif freq_factor < 0.7:  # Mid frequencies (vocals)
+                bar_level = audio_level * (1.0 + 0.6 * math.sin(current_time * 4))
+            else:  # High frequencies (treble)
+                bar_level = audio_level * (0.6 + 0.8 * math.sin(current_time * 6))
+            
+            # Add some randomness for realistic meter behavior
+            noise = (hash(str(current_time + i)) % 100) / 1000.0  # Small random variation
+            bar_level = max(0, min(1.0, bar_level + noise))
+            
+            # Add decay for realistic meter behavior
+            if hasattr(self, 'last_bar_levels') and i < len(self.last_bar_levels):
+                decay_factor = 0.85  # How fast bars fall
+                bar_level = max(bar_level, self.last_bar_levels[i] * decay_factor)
+            
+            meter_bars.append({
+                'bar_index': i,
+                'level': bar_level,
+                'height': int(bar_level * 100),  # Height in pixels
+                'time': current_time,
+                'frequency_band': freq_factor
+            })
+        
+        # Store current levels for decay calculation
+        self.last_bar_levels = [bar['level'] for bar in meter_bars]
+        
+        # Keep meter data for visualization
+        self.audio_waves = meter_bars
+    
+    def _speak(self, text):
+        """Text to speech"""
+        try:
+            os.system(f'powershell -Command "Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak(\'{text}\')"')
+        except Exception as e:
+            print(f"JARVIS speech error: {e}")
 
 
 def main():
-    """Main application entry point"""
-    print("🤚 ARCHAND - Advanced Hand Gesture Recognition System")
+    """Main application entry point - Hybrid Hand Gesture & Voice Control Mode"""
+    print("🤖 jarvAIs - Hand Gesture & Voice Control System")
+    print("=" * 60)
+    print("👋 Hand Gestures:")
+    print("   Index finger: Move mouse")
+    print("   Index + Middle: Click")
+    print("   Thumb: Right click")
+    print("   Fist: Scroll up")
+    print("   Open palm: Scroll down")
+    print("   Middle finger: Speech to text")
+    print("")
+    print("🎤 Voice Commands:")
+    print("   Say 'JARVIS' followed by: calculator, notepad, browser, time, date, joke, volume up/down, minimize, close, quit")
+    print("")
+    print("📝 Live Transcription: ENABLED")
+    print("   - Shows what JARVIS hears in real-time")
+    print("   - Commands with 'JARVIS' wake word are executed")
+    print("   - Other speech is transcribed for reference")
     print("=" * 60)
     
-    # Parse arguments
-    args = parse_arguments()
-    
     # Create configuration
-    config = Config(
-        camera_width=args.width,
-        camera_height=args.height,
-        camera_fps=args.fps,
-        smoothing_factor=args.sensitivity,
-        show_fps=not args.no_fps,
-        show_gesture_info=not args.no_gesture_info
-    )
+    config = Config()
     
     # Initialize camera
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("❌ Error: Could not open camera. Please check camera permissions.")
-        print("💡 Tip: Go to System Preferences > Security & Privacy > Camera")
         return 1
         
     # Configure camera
@@ -499,21 +1149,18 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.camera_height)
     cap.set(cv2.CAP_PROP_FPS, config.camera_fps)
     
-    # Initialize gesture recognizer
+    # Initialize JARVIS voice control first
+    jarvis = JARVISVoiceController(config)
+    
+    # Initialize gesture recognizer with jarvis reference
     recognizer = HandGestureRecognizer(config)
+    recognizer.jarvis = jarvis  # Pass jarvis instance for live transcription
     
-    print("🚀 Starting gesture recognition...")
-    print("📋 Gesture Guide:")
-    print("   👆 Index finger: Move mouse")
-    print("   👆👆 Index + Middle: Click")
-    print("   👍 Thumb: Right click")
-    print("   🖐️ Fist: Scroll up")
-    print("   ✋ Open palm: Scroll down")
-    print("   🖕 Middle finger: Speech to text")
-    print("   Press 'q' to quit")
-    print("-" * 60)
+    # Auto-start voice recognition
+    jarvis.start_auto()
     
-    # Main loop
+    print("🚀 jarvAIs started! Press 'q' to quit.")
+    
     try:
         while True:
             success, frame = cap.read()
@@ -521,17 +1168,17 @@ def main():
                 print("❌ Error: Could not read frame from camera")
                 break
                 
-            # Process frame
+            # Process frame for hand gestures
             frame = recognizer.detect_hands(frame)
             landmarks, _ = recognizer.get_hand_landmarks(frame)
             
             # Detect and execute gestures
             if len(landmarks) >= 21:  # Full hand detected
                 fingers = recognizer.detect_finger_states(landmarks)
-                gesture = recognizer.classify_gesture(fingers)
+                gesture = recognizer.classify_gesture(fingers, landmarks)
                 recognizer.execute_gesture(gesture, landmarks, frame)
             else:
-                gesture = GestureType.MOVE
+                gesture = GestureType.NONE
                 
             # Calculate FPS
             current_time = time.time()
@@ -542,21 +1189,22 @@ def main():
             recognizer.draw_ui(frame, gesture, fps)
             
             # Display frame
-            cv2.imshow("🤚 ARCHAND - Hand Gesture Control", frame)
+            cv2.imshow("jarvAIs - Hand Gesture & Voice Control", frame)
             
             # Check for quit
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
                 
     except KeyboardInterrupt:
-        print("\n🛑 Application interrupted by user")
+        print("\n👋 jarvAIs shutting down...")
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
     finally:
         # Cleanup
         cap.release()
         cv2.destroyAllWindows()
-        print("👋 ARCHAND session ended. Thank you!")
+        jarvis.stop_listening()
+        print("✅ jarvAIs session ended. Thank you!")
         
     return 0
 

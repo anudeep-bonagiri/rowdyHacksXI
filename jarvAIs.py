@@ -682,7 +682,7 @@ class JARVISVoiceController:
 
 
 class jarvAIsGUI:
-    """Complete integrated jarvAIs application with JARVIS voice control"""
+    """🤠 jarvAIs Western Command Center - Desert Night Theme"""
     
     def __init__(self):
         if not GUI_AVAILABLE:
@@ -690,9 +690,20 @@ class jarvAIsGUI:
             sys.exit(1)
             
         self.root = tk.Tk()
-        self.root.title("jarvAIs - Space Command Center")
+        self.root.title("🤠 jarvAIs Western Command Center")
         self.root.geometry("1600x1000")
-        self.root.configure(bg='#0a0a1a')
+        
+        # Desert Night Theme Colors
+        self.colors = {
+            'deep_navy': '#0b1b3b',
+            'sand_orange': '#c8692a', 
+            'gold': '#f6c05b',
+            'dark_bg': '#0a0a1a',
+            'card_bg': '#1a1a3a',
+            'accent': '#ff8c00'
+        }
+        
+        self.root.configure(bg=self.colors['deep_navy'])
         
         # Make window fullscreen-capable
         self.root.state('zoomed')  # Maximize on Windows
@@ -720,17 +731,20 @@ class jarvAIsGUI:
         self.root.after(1000, self.start_camera)
         
     def create_widgets(self):
-        """Create the space-themed GUI interface"""
-        # Main container with space background
-        main_frame = tk.Frame(self.root, bg='#0a0a1a')
-        main_frame.pack(fill='both', expand=True)
+        """Create the Western desert-themed GUI interface following the Desert Night structure"""
+        # Create starfield background first
+        self.create_starfield()
         
-        # Top navigation bar
-        self.create_navigation()
+        # Main container with Desert Night background - place it above starfield
+        main_frame = tk.Frame(self.root, bg=self.colors['deep_navy'])
+        main_frame.place(x=0, y=0, relwidth=1, relheight=1)
         
-        # Main content area
-        self.content_frame = tk.Frame(main_frame, bg='#0a0a1a')
-        self.content_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        # 1️⃣ HEADER SECTION - Western Command Center
+        self.create_header_section(main_frame)
+        
+        # 2️⃣ MAIN CONTENT AREA - Horizontal layout
+        self.content_frame = tk.Frame(main_frame, bg=self.colors['deep_navy'])
+        self.content_frame.pack(fill='both', expand=True, padx=20, pady=10)
         
         # Create all pages
         self.create_main_page()
@@ -739,39 +753,49 @@ class jarvAIsGUI:
         self.create_tools_page()
         self.create_settings_page()
         
+        # 3️⃣ FOOTER / NAVIGATION BAR
+        self.create_footer_navigation(main_frame)
+        
         # Show initial page
         self.show_page(0)
         
     def create_starfield(self):
-        """Create animated starfield background"""
-        self.starfield_canvas = Canvas(self.root, bg='#0a0a1a', highlightthickness=0)
-        self.starfield_canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        # Send to back
-        self.starfield_canvas.lower()
+        """Create animated starfield background for Desert Night theme"""
+        # Create a frame for the starfield that will be behind everything
+        self.starfield_frame = tk.Frame(self.root, bg=self.colors['dark_bg'])
+        self.starfield_frame.place(x=0, y=0, relwidth=1, relheight=1)
         
-        # Create stars
+        self.starfield_canvas = Canvas(self.starfield_frame, bg=self.colors['dark_bg'], highlightthickness=0)
+        self.starfield_canvas.pack(fill='both', expand=True)
+        
+        # Create stars with Desert Night colors
         self.stars = []
-        for _ in range(100):
-            x = self.root.winfo_screenwidth() * 0.8 * (0.1 + 0.8 * (hash(str(_)) % 1000) / 1000)
-            y = self.root.winfo_screenheight() * 0.8 * (0.1 + 0.8 * (hash(str(_ + 1000)) % 1000) / 1000)
-            size = 1 + (hash(str(_ + 2000)) % 3)
+        for _ in range(150):  # More stars for desert night
+            x = self.root.winfo_screenwidth() * 0.9 * (0.05 + 0.9 * (hash(str(_)) % 1000) / 1000)
+            y = self.root.winfo_screenheight() * 0.9 * (0.05 + 0.9 * (hash(str(_ + 1000)) % 1000) / 1000)
+            size = 1 + (hash(str(_ + 2000)) % 4)
             self.stars.append({
                 'x': x, 'y': y, 'size': size,
-                'brightness': 0.3 + 0.7 * (hash(str(_ + 3000)) % 1000) / 1000
+                'brightness': 0.2 + 0.8 * (hash(str(_ + 3000)) % 1000) / 1000,
+                'color': 'gold' if hash(str(_ + 4000)) % 10 == 0 else 'white'
             })
         
         self.animate_stars()
         
     def animate_stars(self):
-        """Animate the starfield"""
+        """Animate the starfield with Desert Night twinkling"""
         self.starfield_canvas.delete("all")
         
         for star in self.stars:
-            # Twinkling effect
-            brightness = star['brightness'] + 0.3 * (hash(str(star['x'] + star['y'])) % 1000) / 1000
+            # Enhanced twinkling effect for desert night
+            brightness = star['brightness'] + 0.4 * (hash(str(star['x'] + star['y'])) % 1000) / 1000
             brightness = min(1.0, brightness)
             
-            color = f"#{int(100 * brightness):02x}{int(150 * brightness):02x}{int(255 * brightness):02x}"
+            # Desert Night star colors
+            if star['color'] == 'gold':
+                color = f"#{int(246 * brightness):02x}{int(192 * brightness):02x}{int(91 * brightness):02x}"
+            else:
+                color = f"#{int(255 * brightness):02x}{int(255 * brightness):02x}{int(255 * brightness):02x}"
             
             self.starfield_canvas.create_oval(
                 star['x'] - star['size'], star['y'] - star['size'],
@@ -780,23 +804,75 @@ class jarvAIsGUI:
             )
         
         # Schedule next animation
-        self.root.after(100, self.animate_stars)
+        self.root.after(80, self.animate_stars)
+        
+    def create_header_section(self, parent):
+        """1️⃣ HEADER SECTION - Western Command Center with Desert Night theme"""
+        header_frame = tk.Frame(parent, bg=self.colors['deep_navy'], height=120)
+        header_frame.pack(fill='x', padx=0, pady=0)
+        header_frame.pack_propagate(False)
+        
+        # Left: Crescent moon and stars
+        left_decor = tk.Frame(header_frame, bg=self.colors['deep_navy'])
+        left_decor.pack(side='left', padx=20, pady=20)
+        
+        moon_label = tk.Label(left_decor, text="🌙", font=('Arial', 24), 
+                             bg=self.colors['deep_navy'], fg=self.colors['gold'])
+        moon_label.pack()
+        
+        stars_label = tk.Label(left_decor, text="⭐ ✨ ⭐", font=('Arial', 12), 
+                              bg=self.colors['deep_navy'], fg=self.colors['gold'])
+        stars_label.pack()
+        
+        # Center: Title and subtitle
+        center_frame = tk.Frame(header_frame, bg=self.colors['deep_navy'])
+        center_frame.pack(expand=True, fill='both', pady=20)
+        
+        # Main title with Western serif styling
+        title_label = tk.Label(center_frame, 
+                             text="Welcome to jarvAIs Western Command Center",
+                             font=('Times New Roman', 28, 'bold'),
+                             bg=self.colors['deep_navy'], fg=self.colors['gold'])
+        title_label.pack(pady=(10, 5))
+        
+        # Subtitle
+        subtitle_label = tk.Label(center_frame,
+                                text="Control your computer with hand gestures and voice commands under the desert night sky",
+                                font=('Arial', 14),
+                                bg=self.colors['deep_navy'], fg=self.colors['sand_orange'])
+        subtitle_label.pack()
+        
+        # Rope underline accent
+        rope_frame = tk.Frame(center_frame, bg=self.colors['sand_orange'], height=3)
+        rope_frame.pack(fill='x', padx=50, pady=(10, 0))
+        
+        # Right: Cartoon cow mascot
+        right_decor = tk.Frame(header_frame, bg=self.colors['deep_navy'])
+        right_decor.pack(side='right', padx=20, pady=20)
+        
+        cow_label = tk.Label(right_decor, text="🐄", font=('Arial', 32), 
+                            bg=self.colors['deep_navy'], fg=self.colors['sand_orange'])
+        cow_label.pack()
+        
+        cowboy_label = tk.Label(right_decor, text="🤠", font=('Arial', 16), 
+                               bg=self.colors['deep_navy'], fg=self.colors['gold'])
+        cowboy_label.pack()
         
     def create_navigation(self):
-        """Create space-themed navigation bar"""
-        nav_frame = tk.Frame(self.root, bg='#1a1a2e', height=60)
+        """Create Western-themed navigation bar"""
+        nav_frame = tk.Frame(self.root, bg='#2d1b1b', height=60)
         nav_frame.pack(fill='x', padx=0, pady=0)
         nav_frame.pack_propagate(False)
         
         # Title
         title_label = tk.Label(nav_frame, 
-                             text="jarvAIs Space Command Center",
+                             text="jarvAIs Western Command Center",
                              font=('Arial', 20, 'bold'),
-                             bg='#1a1a2e', fg='#4fc3f7')
+                             bg='#2d1b1b', fg='#ff8c00')
         title_label.pack(side='left', padx=20, pady=15)
         
         # Navigation buttons
-        nav_buttons_frame = tk.Frame(nav_frame, bg='#1a1a2e')
+        nav_buttons_frame = tk.Frame(nav_frame, bg='#2d1b1b')
         nav_buttons_frame.pack(side='right', padx=20, pady=10)
         
         page_names = ["Main", "Gestures", "Voice", "Tools", "Settings"]
@@ -806,7 +882,7 @@ class jarvAIsGUI:
             btn = tk.Button(nav_buttons_frame,
                           text=name,
                           font=('Arial', 10, 'bold'),
-                          bg='#2d2d44', fg='#4fc3f7',
+                          bg='#8b4513', fg='#ff8c00',
                           command=lambda i=i: self.show_page(i),
                           width=12, height=2,
                           relief='flat', bd=0)
@@ -814,277 +890,439 @@ class jarvAIsGUI:
             self.nav_buttons.append(btn)
         
         # Status indicators
-        status_frame = tk.Frame(nav_frame, bg='#1a1a2e')
+        status_frame = tk.Frame(nav_frame, bg='#2d1b1b')
         status_frame.pack(side='right', padx=20, pady=10)
         
         self.status_label = tk.Label(status_frame, 
                                    text="Initializing...",
                                    font=('Arial', 10),
-                                   bg='#1a1a2e', fg='#4fc3f7')
+                                   bg='#2d1b1b', fg='#ff8c00')
         self.status_label.pack(side='top')
         
         self.fps_label = tk.Label(status_frame, 
                                 text="FPS: 0",
                                 font=('Arial', 10),
-                                bg='#1a1a2e', fg='#81c784')
+                                bg='#2d1b1b', fg='#90ee90')
         self.fps_label.pack(side='bottom')
         
     def create_main_page(self):
-        """Create the main dashboard page"""
-        self.main_page = tk.Frame(self.content_frame, bg='#0a0a1a')
+        """2️⃣ MAIN CONTENT AREA - Horizontal layout with camera and gesture panels"""
+        self.main_page = tk.Frame(self.content_frame, bg=self.colors['deep_navy'])
         
-        # Welcome section
-        welcome_frame = tk.Frame(self.main_page, bg='#1a1a2e', relief='raised', bd=2)
-        welcome_frame.pack(fill='x', pady=(0, 20))
+        # LEFT PANEL: Live Camera Feed
+        camera_panel = tk.Frame(self.main_page, bg=self.colors['card_bg'], relief='raised', bd=2)
+        camera_panel.pack(side='left', fill='both', expand=True, padx=(0, 10))
         
-        welcome_label = tk.Label(welcome_frame,
-                               text="Welcome to jarvAIs Space Command Center",
-                               font=('Arial', 24, 'bold'),
-                               bg='#1a1a2e', fg='#4fc3f7')
-        welcome_label.pack(pady=20)
+        # Camera panel header
+        camera_header = tk.Label(camera_panel, text="🚀 Live Camera Feed", 
+                               font=('Times New Roman', 18, 'bold'),
+                               bg=self.colors['card_bg'], fg=self.colors['gold'])
+        camera_header.pack(pady=(20, 10))
         
-        # Camera section
-        camera_frame = tk.Frame(self.main_page, bg='#1a1a2e', relief='raised', bd=2)
-        camera_frame.pack(side='left', fill='both', expand=True, padx=(0, 10))
-        
-        camera_title = tk.Label(camera_frame, text="Live Camera Feed", 
-                               font=('Arial', 16, 'bold'),
-                               bg='#1a1a2e', fg='#ffffff')
-        camera_title.pack(pady=(20, 10))
-        
-        # Camera canvas with space border
-        self.camera_canvas = Canvas(camera_frame, width=640, height=480, 
-                                  bg='#000011', relief='raised', bd=3,
-                                  highlightbackground='#4fc3f7')
+        # Camera canvas with Desert Night styling
+        self.camera_canvas = Canvas(camera_panel, width=640, height=480, 
+                                  bg=self.colors['dark_bg'], relief='raised', bd=3,
+                                  highlightbackground=self.colors['sand_orange'])
         self.camera_canvas.pack(pady=(0, 20))
         
-        # Control buttons
-        control_frame = tk.Frame(camera_frame, bg='#1a1a2e')
-        control_frame.pack(fill='x', pady=(0, 20))
+        # Camera controls
+        camera_controls = tk.Frame(camera_panel, bg=self.colors['card_bg'])
+        camera_controls.pack(fill='x', pady=(0, 15))
         
-        self.start_button = tk.Button(control_frame,
-                                    text="ACTIVATE jarvAIs",
-                                    font=('Arial', 12, 'bold'),
-                                    bg='#4fc3f7', fg='#000011',
+        self.start_button = tk.Button(camera_controls,
+                                    text="🚀 ACTIVATE JarvAIs",
+                                    font=('Arial', 14, 'bold'),
+                                    bg=self.colors['sand_orange'], fg=self.colors['deep_navy'],
                                     command=self.start_gesture_control,
-                                    width=18, height=2)
+                                    width=20, height=2,
+                                    relief='raised', bd=2)
         self.start_button.pack(side='left', padx=(20, 10))
         
-        self.stop_button = tk.Button(control_frame,
-                                   text="DEACTIVATE",
-                                   font=('Arial', 12, 'bold'),
-                                   bg='#f44336', fg='#ffffff',
+        self.stop_button = tk.Button(camera_controls,
+                                   text="⛔ DEACTIVATE",
+                                   font=('Arial', 14, 'bold'),
+                                   bg='#696969', fg='#ffffff',
                                    command=self.stop_gesture_control,
-                                   state='disabled', width=18, height=2)
-        self.stop_button.pack(side='left', padx=(0, 10))
+                                   state='disabled', width=20, height=2,
+                                   relief='raised', bd=2)
+        self.stop_button.pack(side='left', padx=(0, 20))
         
-        self.voice_button = tk.Button(control_frame,
-                                    text="VOICE ON",
-                                    font=('Arial', 12, 'bold'),
-                                    bg='#81c784', fg='#000011',
-                                    command=self.toggle_jarvis,
-                                    width=15, height=2)
-        self.voice_button.pack(side='left', padx=(0, 20))
+        # Camera status
+        camera_status = tk.Label(camera_panel, 
+                               text="Camera ready — FPS: 0.00",
+                               font=('Arial', 12),
+                               bg=self.colors['card_bg'], fg=self.colors['gold'])
+        camera_status.pack(pady=(0, 20))
         
-        # Gesture display
-        gesture_frame = tk.Frame(self.main_page, bg='#1a1a2e', relief='raised', bd=2, width=300)
-        gesture_frame.pack(side='right', fill='y')
-        gesture_frame.pack_propagate(False)
+        # RIGHT PANEL: Gesture Controls
+        gesture_panel = tk.Frame(self.main_page, bg=self.colors['card_bg'], relief='raised', bd=2, width=350)
+        gesture_panel.pack(side='right', fill='y')
+        gesture_panel.pack_propagate(False)
         
-        gesture_title = tk.Label(gesture_frame, text="Current Gesture", 
-                                font=('Arial', 16, 'bold'),
-                                bg='#1a1a2e', fg='#ffffff')
-        gesture_title.pack(pady=(20, 10))
+        gesture_header = tk.Label(gesture_panel, text="🔥 Gesture Instructions", 
+                                font=('Times New Roman', 18, 'bold'),
+                                bg=self.colors['card_bg'], fg=self.colors['gold'])
+        gesture_header.pack(pady=(20, 15))
         
-        self.gesture_display = tk.Label(gesture_frame, 
-                                      text="NONE",
-                                      font=('Arial', 24, 'bold'),
-                                      bg='#2d2d44', fg='#4fc3f7',
-                                      width=12, height=3)
-        self.gesture_display.pack(pady=(0, 20))
+        # Create gesture instruction cards
+        self.create_gesture_cards(gesture_panel)
         
-        # Quick stats
-        stats_frame = tk.Frame(gesture_frame, bg='#1a1a2e')
-        stats_frame.pack(fill='x', padx=20, pady=(0, 20))
+    def create_gesture_cards(self, parent_frame):
+        """Create gesture instruction cards with Desert Night styling"""
+        # Move Pointer Card
+        move_card = tk.Frame(parent_frame, bg=self.colors['sand_orange'], relief='raised', bd=2)
+        move_card.pack(fill='x', padx=15, pady=8)
         
-        tk.Label(stats_frame, text="System Status", font=('Arial', 12, 'bold'),
-                bg='#1a1a2e', fg='#ffffff').pack(anchor='w')
+        move_title = tk.Label(move_card, text="👆 Move Pointer", 
+                             font=('Arial', 14, 'bold'),
+                             bg=self.colors['sand_orange'], fg=self.colors['deep_navy'])
+        move_title.pack(pady=(12, 5))
         
-        self.jarvis_status = tk.Label(stats_frame, 
-                                    text="jarvAIs: Ready",
-                                    font=('Arial', 10),
-                                    bg='#1a1a2e', fg='#81c784')
-        self.jarvis_status.pack(anchor='w', pady=(5, 0))
+        move_desc = tk.Label(move_card, text="Move your index finger to control the mouse cursor", 
+                            font=('Arial', 11),
+                            bg=self.colors['sand_orange'], fg=self.colors['deep_navy'])
+        move_desc.pack(pady=(0, 12))
+        
+        # Single Click Card
+        click_card = tk.Frame(parent_frame, bg=self.colors['gold'], relief='raised', bd=2)
+        click_card.pack(fill='x', padx=15, pady=8)
+        
+        click_title = tk.Label(click_card, text="👆 Single Click", 
+                              font=('Arial', 14, 'bold'),
+                              bg=self.colors['gold'], fg=self.colors['deep_navy'])
+        click_title.pack(pady=(12, 5))
+        
+        click_desc = tk.Label(click_card, text="Point and tap your index finger to left click", 
+                             font=('Arial', 11),
+                             bg=self.colors['gold'], fg=self.colors['deep_navy'])
+        click_desc.pack(pady=(0, 12))
+        
+        # Double Click Card
+        dclick_card = tk.Frame(parent_frame, bg=self.colors['sand_orange'], relief='raised', bd=2)
+        dclick_card.pack(fill='x', padx=15, pady=8)
+        
+        dclick_title = tk.Label(dclick_card, text="👆👆 Double Click", 
+                               font=('Arial', 14, 'bold'),
+                               bg=self.colors['sand_orange'], fg=self.colors['deep_navy'])
+        dclick_title.pack(pady=(12, 5))
+        
+        dclick_desc = tk.Label(dclick_card, text="Point and tap twice quickly to double click", 
+                              font=('Arial', 11),
+                              bg=self.colors['sand_orange'], fg=self.colors['deep_navy'])
+        dclick_desc.pack(pady=(0, 12))
+        
+        # Right Click Card
+        rclick_card = tk.Frame(parent_frame, bg=self.colors['gold'], relief='raised', bd=2)
+        rclick_card.pack(fill='x', padx=15, pady=8)
+        
+        rclick_title = tk.Label(rclick_card, text="👍 Right Click", 
+                               font=('Arial', 14, 'bold'),
+                               bg=self.colors['gold'], fg=self.colors['deep_navy'])
+        rclick_title.pack(pady=(12, 5))
+        
+        rclick_desc = tk.Label(rclick_card, text="Hold your index finger and tap your thumb to right click", 
+                              font=('Arial', 11),
+                              bg=self.colors['gold'], fg=self.colors['deep_navy'])
+        rclick_desc.pack(pady=(0, 12))
+        
+    def create_footer_navigation(self, parent):
+        """3️⃣ FOOTER / NAVIGATION BAR - Desert Night theme"""
+        footer_frame = tk.Frame(parent, bg=self.colors['card_bg'], height=60)
+        footer_frame.pack(fill='x', side='bottom', padx=0, pady=0)
+        footer_frame.pack_propagate(False)
+        
+        # Left: App name and theme
+        footer_left = tk.Label(footer_frame, 
+                              text="jarvAIs Western Command Center — Desert Night",
+                              font=('Arial', 12, 'bold'),
+                              bg=self.colors['card_bg'], fg=self.colors['sand_orange'])
+        footer_left.pack(side='left', padx=20, pady=15)
+        
+        # Center: Status indicators
+        status_frame = tk.Frame(footer_frame, bg=self.colors['card_bg'])
+        status_frame.pack(side='left', expand=True, fill='x', padx=20)
+        
+        self.camera_status_text = tk.Label(status_frame, 
+                                         text="Camera ready",
+                                         font=('Arial', 11),
+                                         bg=self.colors['card_bg'], fg=self.colors['gold'])
+        self.camera_status_text.pack(side='left', padx=10)
+        
+        self.fps_counter = tk.Label(status_frame, 
+                                  text="FPS: 00.00",
+                                  font=('Arial', 11),
+                                  bg=self.colors['card_bg'], fg=self.colors['gold'])
+        self.fps_counter.pack(side='left', padx=10)
+        
+        # Right: Navigation tabs
+        nav_tabs_frame = tk.Frame(footer_frame, bg=self.colors['card_bg'])
+        nav_tabs_frame.pack(side='right', padx=20, pady=10)
+        
+        tab_names = ["Main", "Gestures", "Voice", "Tools", "Settings"]
+        self.nav_tabs = []
+        
+        for i, name in enumerate(tab_names):
+            tab_btn = tk.Button(nav_tabs_frame,
+                              text=name,
+                              font=('Arial', 10, 'bold'),
+                              bg=self.colors['sand_orange'], fg=self.colors['deep_navy'],
+                              command=lambda i=i: self.show_page(i),
+                              width=10, height=1,
+                              relief='raised', bd=1)
+            tab_btn.pack(side='left', padx=3)
+            self.nav_tabs.append(tab_btn)
         
     def create_gestures_page(self):
-        """Create the gestures reference page"""
-        self.gestures_page = tk.Frame(self.content_frame, bg='#0a0a1a')
+        """Create the gestures reference page with Desert Night theme"""
+        self.gestures_page = tk.Frame(self.content_frame, bg=self.colors['deep_navy'])
         
         # Page title
         title = tk.Label(self.gestures_page,
-                        text="Hand Gesture Reference",
-                        font=('Arial', 24, 'bold'),
-                        bg='#0a0a1a', fg='#4fc3f7')
+                        text="🔥 Hand Gesture Reference",
+                        font=('Times New Roman', 28, 'bold'),
+                        bg=self.colors['deep_navy'], fg=self.colors['gold'])
         title.pack(pady=(0, 30))
         
         # Gesture grid
-        gestures_frame = tk.Frame(self.gestures_page, bg='#0a0a1a')
+        gestures_frame = tk.Frame(self.gestures_page, bg=self.colors['deep_navy'])
         gestures_frame.pack(fill='both', expand=True)
         
         gestures = [
-            ("Index Finger", "Move Mouse", "#4fc3f7"),
-            ("Index + Middle", "Left Click", "#81c784"),
-            ("Thumb", "Right Click", "#ffb74d"),
-            ("Fist", "Scroll Up", "#f48fb1"),
-            ("Open Palm", "Scroll Down", "#ce93d8"),
-            ("Middle Finger", "Speech to Text", "#a5d6a7")
+            ("👆 Index Finger", "Move Mouse", self.colors['sand_orange']),
+            ("👆👆 Index + Middle", "Left Click", self.colors['gold']),
+            ("👍 Thumb", "Right Click", self.colors['sand_orange']),
+            ("✊ Fist", "Scroll Up", self.colors['gold']),
+            ("✋ Open Palm", "Scroll Down", self.colors['sand_orange']),
+            ("🖕 Middle Finger", "Speech to Text", self.colors['gold'])
         ]
         
         for i, (gesture, action, color) in enumerate(gestures):
             row = i // 2
             col = i % 2
             
-            gesture_frame = tk.Frame(gestures_frame, bg='#1a1a2e', relief='raised', bd=2)
+            gesture_frame = tk.Frame(gestures_frame, bg=self.colors['card_bg'], relief='raised', bd=2)
             gesture_frame.grid(row=row, column=col, padx=20, pady=20, sticky='nsew')
             
             tk.Label(gesture_frame, text=gesture, font=('Arial', 16, 'bold'),
-                    bg='#1a1a2e', fg=color).pack(pady=(20, 10))
+                    bg=self.colors['card_bg'], fg=color).pack(pady=(20, 10))
             
             tk.Label(gesture_frame, text=action, font=('Arial', 12),
-                    bg='#1a1a2e', fg='#ffffff').pack(pady=(0, 20))
+                    bg=self.colors['card_bg'], fg=self.colors['gold']).pack(pady=(0, 20))
         
         gestures_frame.grid_columnconfigure(0, weight=1)
         gestures_frame.grid_columnconfigure(1, weight=1)
         
     def create_voice_page(self):
-        """Create the voice control page"""
-        self.voice_page = tk.Frame(self.content_frame, bg='#0a0a1a')
+        """4️⃣ VOICE PAGE - Chatbot Integration with Desert Night theme"""
+        self.voice_page = tk.Frame(self.content_frame, bg=self.colors['deep_navy'])
         
         # Page title
         title = tk.Label(self.voice_page,
-                        text="Voice Command Center",
-                        font=('Arial', 24, 'bold'),
-                        bg='#0a0a1a', fg='#4fc3f7')
-        title.pack(pady=(0, 30))
+                        text="🎤 Voice Command Center",
+                        font=('Times New Roman', 28, 'bold'),
+                        bg=self.colors['deep_navy'], fg=self.colors['gold'])
+        title.pack(pady=(0, 20))
         
-        # Voice controls
-        voice_control_frame = tk.Frame(self.voice_page, bg='#1a1a2e', relief='raised', bd=2)
-        voice_control_frame.pack(fill='x', pady=(0, 20))
+        # Voice controls section
+        voice_control_frame = tk.Frame(self.voice_page, bg=self.colors['card_bg'], relief='raised', bd=2)
+        voice_control_frame.pack(fill='x', pady=(0, 15))
         
-        tk.Label(voice_control_frame, text="JARVIS Voice Control", 
-                font=('Arial', 18, 'bold'), bg='#1a1a2e', fg='#ffffff').pack(pady=20)
+        tk.Label(voice_control_frame, text="🤖 JARVIS Voice Control", 
+                font=('Times New Roman', 20, 'bold'), 
+                bg=self.colors['card_bg'], fg=self.colors['gold']).pack(pady=20)
         
-        # Voice transcription
+        # Voice control buttons
+        voice_buttons_frame = tk.Frame(voice_control_frame, bg=self.colors['card_bg'])
+        voice_buttons_frame.pack(pady=(0, 15))
+        
+        self.voice_button = tk.Button(voice_buttons_frame,
+                                    text="🎤 VOICE ON",
+                                    font=('Arial', 14, 'bold'),
+                                    bg=self.colors['sand_orange'], fg=self.colors['deep_navy'],
+                                    command=self.toggle_jarvis,
+                                    width=15, height=2,
+                                    relief='raised', bd=2)
+        self.voice_button.pack(side='left', padx=10)
+        
+        # Voice transcription display
         self.voice_display = tk.Text(voice_control_frame, 
-                                   height=10, width=80,
+                                   height=8, width=90,
                                    font=('Arial', 11),
-                                   bg='#2d2d44', fg='#4fc3f7',
+                                   bg=self.colors['dark_bg'], fg=self.colors['gold'],
                                    wrap=tk.WORD, relief='sunken', bd=2)
         self.voice_display.pack(pady=(0, 20), padx=20)
         
-        # Commands reference
-        commands_frame = tk.Frame(self.voice_page, bg='#1a1a2e', relief='raised', bd=2)
-        commands_frame.pack(fill='both', expand=True)
+        # Chatbot Integration Section
+        chatbot_frame = tk.Frame(self.voice_page, bg=self.colors['card_bg'], relief='raised', bd=2)
+        chatbot_frame.pack(fill='both', expand=True)
         
-        tk.Label(commands_frame, text="Available Commands", 
-                font=('Arial', 16, 'bold'), bg='#1a1a2e', fg='#ffffff').pack(pady=20)
+        tk.Label(chatbot_frame, text="💬 Chatbot Integration", 
+                font=('Times New Roman', 18, 'bold'), 
+                bg=self.colors['card_bg'], fg=self.colors['gold']).pack(pady=20)
+        
+        # Chat messages area
+        chat_messages_frame = tk.Frame(chatbot_frame, bg=self.colors['card_bg'])
+        chat_messages_frame.pack(fill='both', expand=True, padx=20, pady=(0, 15))
+        
+        self.chat_messages = tk.Text(chatbot_frame, 
+                                    height=12, width=90,
+                                    font=('Arial', 10),
+                                    bg=self.colors['dark_bg'], fg=self.colors['sand_orange'],
+                                    wrap=tk.WORD, relief='sunken', bd=2)
+        self.chat_messages.pack(pady=(0, 15), padx=20)
+        
+        # Chat input area
+        chat_input_frame = tk.Frame(chatbot_frame, bg=self.colors['card_bg'])
+        chat_input_frame.pack(fill='x', padx=20, pady=(0, 20))
+        
+        self.chat_input = tk.Entry(chat_input_frame, 
+                                  font=('Arial', 12),
+                                  bg=self.colors['dark_bg'], fg=self.colors['gold'],
+                                  relief='sunken', bd=2)
+        self.chat_input.pack(side='left', fill='x', expand=True, padx=(0, 10))
+        self.chat_input.bind('<Return>', self.send_chat_message)
+        
+        self.send_chat_btn = tk.Button(chat_input_frame,
+                                     text="Send",
+                                     font=('Arial', 12, 'bold'),
+                                     bg=self.colors['sand_orange'], fg=self.colors['deep_navy'],
+                                     command=self.send_chat_message,
+                                     width=10, height=1,
+                                     relief='raised', bd=2)
+        self.send_chat_btn.pack(side='right')
+        
+        # Commands reference
+        commands_frame = tk.Frame(self.voice_page, bg=self.colors['card_bg'], relief='raised', bd=2)
+        commands_frame.pack(fill='x', pady=(15, 0))
+        
+        tk.Label(commands_frame, text="📋 Available Voice Commands", 
+                font=('Times New Roman', 16, 'bold'), 
+                bg=self.colors['card_bg'], fg=self.colors['gold']).pack(pady=15)
         
         commands_text = """
-        • "JARVIS calculator" - Opens calculator
-        • "JARVIS notepad" - Opens notepad  
-        • "JARVIS browser" - Opens web browser
-        • "JARVIS time" - Tells current time
-        • "JARVIS date" - Tells current date
-        • "JARVIS joke" - Tells a joke
-        • "JARVIS volume up" - Increases volume
-        • "JARVIS volume down" - Decreases volume
-        • "JARVIS minimize" - Minimizes window
-        • "JARVIS close" - Closes window
+        🎯 Basic Commands: "JARVIS calculator", "JARVIS notepad", "JARVIS browser"
+        ⏰ Time Commands: "JARVIS time", "JARVIS date", "JARVIS joke"
+        🔊 Audio Commands: "JARVIS volume up", "JARVIS volume down", "JARVIS mute"
+        🪟 Window Commands: "JARVIS minimize", "JARVIS close", "JARVIS help"
         """
         
-        tk.Label(commands_frame, text=commands_text, font=('Arial', 12),
-                bg='#1a1a2e', fg='#81c784', justify='left').pack(pady=(0, 20))
+        tk.Label(commands_frame, text=commands_text, font=('Arial', 11),
+                bg=self.colors['card_bg'], fg=self.colors['sand_orange'], 
+                justify='left').pack(pady=(0, 15))
         
     def create_tools_page(self):
-        """Create the tools page"""
-        self.tools_page = tk.Frame(self.content_frame, bg='#0a0a1a')
+        """Create the tools page with Desert Night theme"""
+        self.tools_page = tk.Frame(self.content_frame, bg=self.colors['deep_navy'])
         
         # Page title
         title = tk.Label(self.tools_page,
-                        text="Space Tools & Applications",
-                        font=('Arial', 24, 'bold'),
-                        bg='#0a0a1a', fg='#4fc3f7')
+                        text="🛠️ Western Tools & Applications",
+                        font=('Times New Roman', 28, 'bold'),
+                        bg=self.colors['deep_navy'], fg=self.colors['gold'])
         title.pack(pady=(0, 30))
         
         # Tools grid
-        tools_frame = tk.Frame(self.tools_page, bg='#0a0a1a')
+        tools_frame = tk.Frame(self.tools_page, bg=self.colors['deep_navy'])
         tools_frame.pack(fill='both', expand=True)
         
         tools = [
-            ("Calculator", self._open_calculator, "#4fc3f7"),
-            ("Notepad", self._open_notepad, "#81c784"),
-            ("Browser", self._open_browser, "#ffb74d"),
-            ("Paint", self._open_paint, "#f48fb1"),
-            ("Excel", self._open_excel, "#ce93d8"),
-            ("Word", self._open_word, "#a5d6a7")
+            ("🧮 Calculator", self._open_calculator, self.colors['sand_orange']),
+            ("📝 Notepad", self._open_notepad, self.colors['gold']),
+            ("🌐 Browser", self._open_browser, self.colors['sand_orange']),
+            ("🎨 Paint", self._open_paint, self.colors['gold']),
+            ("📊 Excel", self._open_excel, self.colors['sand_orange']),
+            ("📄 Word", self._open_word, self.colors['gold'])
         ]
         
         for i, (name, command, color) in enumerate(tools):
             row = i // 3
             col = i % 3
             
-            tool_frame = tk.Frame(tools_frame, bg='#1a1a2e', relief='raised', bd=2)
+            tool_frame = tk.Frame(tools_frame, bg=self.colors['card_bg'], relief='raised', bd=2)
             tool_frame.grid(row=row, column=col, padx=20, pady=20, sticky='nsew')
             
             tk.Button(tool_frame, text=name, command=command,
-                     font=('Arial', 14, 'bold'), bg=color, fg='#000011',
-                     width=15, height=3, relief='flat').pack(expand=True, fill='both', padx=20, pady=20)
+                     font=('Arial', 14, 'bold'), bg=color, fg=self.colors['deep_navy'],
+                     width=15, height=3, relief='raised', bd=2).pack(expand=True, fill='both', padx=20, pady=20)
         
         tools_frame.grid_columnconfigure(0, weight=1)
         tools_frame.grid_columnconfigure(1, weight=1)
         tools_frame.grid_columnconfigure(2, weight=1)
         
     def create_settings_page(self):
-        """Create the settings page"""
-        self.settings_page = tk.Frame(self.content_frame, bg='#0a0a1a')
+        """Create the settings page with Desert Night theme"""
+        self.settings_page = tk.Frame(self.content_frame, bg=self.colors['deep_navy'])
         
         # Page title
         title = tk.Label(self.settings_page,
-                        text="System Settings",
-                        font=('Arial', 24, 'bold'),
-                        bg='#0a0a1a', fg='#4fc3f7')
+                        text="⚙️ System Settings",
+                        font=('Times New Roman', 28, 'bold'),
+                        bg=self.colors['deep_navy'], fg=self.colors['gold'])
         title.pack(pady=(0, 30))
         
         # Settings content
-        settings_frame = tk.Frame(self.settings_page, bg='#1a1a2e', relief='raised', bd=2)
+        settings_frame = tk.Frame(self.settings_page, bg=self.colors['card_bg'], relief='raised', bd=2)
         settings_frame.pack(fill='both', expand=True)
         
-        tk.Label(settings_frame, text="jarvAIs Configuration", 
-                font=('Arial', 18, 'bold'), bg='#1a1a2e', fg='#ffffff').pack(pady=20)
+        tk.Label(settings_frame, text="🤠 jarvAIs Configuration", 
+                font=('Times New Roman', 20, 'bold'), 
+                bg=self.colors['card_bg'], fg=self.colors['gold']).pack(pady=20)
         
         # Settings will be added here
-        tk.Label(settings_frame, text="Settings panel coming soon...", 
-                font=('Arial', 12), bg='#1a1a2e', fg='#81c784').pack(pady=50)
+        tk.Label(settings_frame, text="⚙️ Settings panel coming soon...", 
+                font=('Arial', 14), 
+                bg=self.colors['card_bg'], fg=self.colors['sand_orange']).pack(pady=50)
         
     def show_page(self, page_index):
-        """Show the specified page"""
+        """Show the specified page with Desert Night navigation"""
         # Hide all pages
         for page in [self.main_page, self.gestures_page, self.voice_page, 
                     self.tools_page, self.settings_page]:
             page.pack_forget()
         
-        # Update navigation buttons
-        for i, btn in enumerate(self.nav_buttons):
+        # Update navigation tabs
+        for i, btn in enumerate(self.nav_tabs):
             if i == page_index:
-                btn.config(bg='#4fc3f7', fg='#000011')
+                btn.config(bg=self.colors['gold'], fg=self.colors['deep_navy'])
             else:
-                btn.config(bg='#2d2d44', fg='#4fc3f7')
+                btn.config(bg=self.colors['sand_orange'], fg=self.colors['deep_navy'])
         
         # Show selected page
         pages = [self.main_page, self.gestures_page, self.voice_page, 
                 self.tools_page, self.settings_page]
         pages[page_index].pack(fill='both', expand=True)
         self.current_page = page_index
+        
+    def send_chat_message(self, event=None):
+        """Send message to chatbot integration"""
+        message = self.chat_input.get().strip()
+        if not message:
+            return
+            
+        # Add user message to chat
+        self.chat_messages.insert(tk.END, f"👤 You: {message}\n")
+        self.chat_messages.see(tk.END)
+        
+        # Clear input
+        self.chat_input.delete(0, tk.END)
+        
+        # Simulate chatbot response (replace with actual chatbot integration)
+        self.root.after(1000, lambda: self.receive_bot_response(message))
+        
+    def receive_bot_response(self, user_message):
+        """Receive response from chatbot (placeholder for integration)"""
+        # This is where you would integrate with your chatbot API
+        responses = [
+            f"🤖 JARVIS: I understand you said '{user_message}'. How can I help you?",
+            f"🤖 JARVIS: Command received: '{user_message}'. Processing...",
+            f"🤖 JARVIS: '{user_message}' - I'm ready to assist with that task.",
+            f"🤖 JARVIS: Understood '{user_message}'. What would you like me to do next?"
+        ]
+        
+        import random
+        response = random.choice(responses)
+        self.chat_messages.insert(tk.END, f"{response}\n")
+        self.chat_messages.see(tk.END)
         
     def start_camera(self):
         """Initialize camera and start processing"""
@@ -1102,7 +1340,7 @@ class jarvAIsGUI:
             # Initialize recognizer
             self.recognizer = HandGestureRecognizer(self.config)
             
-            self.status_label.config(text="Camera Ready", fg='#00ff88')
+            self.camera_status_text.config(text="Camera Ready", fg=self.colors['gold'])
             
         except Exception as e:
             self.status_label.config(text=f"Error: {e}", fg='#ff0000')
@@ -1117,7 +1355,7 @@ class jarvAIsGUI:
         self.running = True
         self.start_button.config(state='disabled')
         self.stop_button.config(state='normal')
-        self.status_label.config(text="jarvAIs Active", fg='#00ff88')
+        self.camera_status_text.config(text="jarvAIs Active", fg=self.colors['gold'])
         
         # Start camera processing thread
         self.camera_thread = threading.Thread(target=self.camera_loop, daemon=True)
@@ -1131,7 +1369,7 @@ class jarvAIsGUI:
         self.running = False
         self.start_button.config(state='normal')
         self.stop_button.config(state='disabled')
-        self.status_label.config(text="jarvAIs Stopped", fg='#ff6b35')
+        self.camera_status_text.config(text="jarvAIs Stopped", fg=self.colors['sand_orange'])
         
     def camera_loop(self):
         """Main camera processing loop"""
@@ -1163,7 +1401,7 @@ class jarvAIsGUI:
                 self.recognizer.previous_time = current_time
                 
                 # Update FPS display
-                self.root.after(0, lambda f=fps: self.fps_label.config(text=f"FPS: {int(f)}"))
+                self.root.after(0, lambda f=fps: self.fps_counter.config(text=f"FPS: {int(f):.2f}"))
                 
                 # Add frame to queue
                 if not self.frame_queue.full():
@@ -1201,55 +1439,53 @@ class jarvAIsGUI:
         """Toggle JARVIS voice control"""
         if not self.jarvis.listening:
             if self.jarvis.start_listening():
-                self.voice_button.config(text="VOICE OFF", bg='#f44336')
-                self.jarvis_status.config(text="jarvAIs: Listening...", fg='#00ff88')
-                self.voice_display.insert(tk.END, "jarvAIs voice control activated!\n")
+                self.voice_button.config(text="🎤 VOICE OFF", bg='#f44336')
+                self.voice_display.insert(tk.END, "🤖 jarvAIs voice control activated!\n")
                 self.voice_display.see(tk.END)
             else:
-                self.voice_display.insert(tk.END, "jarvAIs microphone not available!\n")
+                self.voice_display.insert(tk.END, "❌ jarvAIs microphone not available!\n")
                 self.voice_display.see(tk.END)
         else:
             self.jarvis.stop_listening()
-            self.voice_button.config(text="VOICE ON", bg='#81c784')
-            self.jarvis_status.config(text="jarvAIs: Stopped", fg='#ff6b35')
-            self.voice_display.insert(tk.END, "jarvAIs voice control stopped.\n")
+            self.voice_button.config(text="🎤 VOICE ON", bg=self.colors['sand_orange'])
+            self.voice_display.insert(tk.END, "⏹️ jarvAIs voice control stopped.\n")
             self.voice_display.see(tk.END)
     
     # Tool methods
     def _open_calculator(self):
         """Open calculator"""
         subprocess.Popen("calc.exe")
-        self.voice_display.insert(tk.END, "Calculator opened\n")
+        self.voice_display.insert(tk.END, "🧮 Calculator opened\n")
         self.voice_display.see(tk.END)
         
     def _open_notepad(self):
         """Open notepad"""
         subprocess.Popen("notepad.exe")
-        self.voice_display.insert(tk.END, "Notepad opened\n")
+        self.voice_display.insert(tk.END, "📝 Notepad opened\n")
         self.voice_display.see(tk.END)
         
     def _open_browser(self):
         """Open web browser"""
         webbrowser.open("https://www.google.com")
-        self.voice_display.insert(tk.END, "Browser opened\n")
+        self.voice_display.insert(tk.END, "🌐 Browser opened\n")
         self.voice_display.see(tk.END)
         
     def _open_paint(self):
         """Open Paint"""
         subprocess.Popen("mspaint.exe")
-        self.voice_display.insert(tk.END, "Paint opened\n")
+        self.voice_display.insert(tk.END, "🎨 Paint opened\n")
         self.voice_display.see(tk.END)
         
     def _open_excel(self):
         """Open Excel"""
         subprocess.Popen("excel.exe")
-        self.voice_display.insert(tk.END, "Excel opened\n")
+        self.voice_display.insert(tk.END, "📊 Excel opened\n")
         self.voice_display.see(tk.END)
         
     def _open_word(self):
         """Open Word"""
         subprocess.Popen("winword.exe")
-        self.voice_display.insert(tk.END, "Word opened\n")
+        self.voice_display.insert(tk.END, "📄 Word opened\n")
         self.voice_display.see(tk.END)
         
     def on_closing(self):
